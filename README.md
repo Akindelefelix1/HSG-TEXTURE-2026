@@ -124,3 +124,21 @@ The portable build runs Vinext directly without a host `timeout` command. The ma
 
 - [vinext Documentation](https://github.com/cloudflare/vinext)
 - [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+## Application structure
+
+Application code follows these boundaries:
+
+- `app/` — routes, layouts, and route-level files
+- `components/storefront/` — storefront feature components and its public export
+- `components/ui/` — reusable, feature-agnostic UI primitives
+- `data/` — static catalog and application data
+- `types/` — shared TypeScript domain types
+- `lib/` — shared helpers and integrations
+- `hooks/` — reusable React hooks
+- `db/` and `drizzle/` — database client, schema, and migrations
+- `public/` — static assets
+- `scripts/` — build and environment tooling
+
+Generated folders such as `.next/`, `.vinext/`, `.sites-checkout/`,
+`.sites-runtime/`, `.wrangler/`, `build/`, and `dist/` are not application
+source and are excluded from linting and type-checking.
