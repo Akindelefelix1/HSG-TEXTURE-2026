@@ -16,3 +16,56 @@ footer{background:#0c1428;color:white;padding:75px 6vw 25px}.footer-main{display
 .nav a.active{font-weight:800}
 .nav a.active:after{right:0}
 @media(max-width:900px){.nav a.active{margin-left:-12px;padding-left:12px;border-left:3px solid var(--gold)}.nav a.active:after{display:none}}
+
+/* Gently moving, single-row collection rail */
+.category-rail{width:100%;overflow:hidden;mask-image:linear-gradient(90deg,transparent,#000 3%,#000 97%,transparent)}
+.category-track{display:flex;width:max-content;gap:14px;animation:collection-scroll 42s linear infinite;will-change:transform}
+.category-track:hover{animation-play-state:paused}
+.category-track .category-card{width:clamp(250px,21vw,330px);flex:0 0 auto}
+@keyframes collection-scroll{to{transform:translateX(calc(-50% - 7px))}}
+.all-categories{padding:28px 0 20px;background:var(--paper)}
+.category-banner:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,#0710248c,transparent)}
+.category-banner strong{position:absolute;left:24px;bottom:20px;z-index:2;display:flex;align-items:center;gap:4px;font-size:.72rem}
+.category-banner-grid .category-banner{display:block}
+@media(prefers-reduced-motion:reduce){.category-rail{overflow-x:auto;mask-image:none}.category-track{animation:none}.category-track [aria-hidden="true"]{display:none}}
+@media(max-width:560px){.category-track .category-card{width:250px;height:300px}.category-banner strong{left:16px;bottom:14px}.category-banner-grid .category-banner{padding:16px}}
+
+/* Category directory */
+.category-directory{padding:90px clamp(20px,6vw,88px);background:var(--paper)}
+.directory-heading{display:grid;grid-template-columns:1.2fr .8fr;align-items:end;gap:8vw;margin-bottom:34px}
+.directory-heading h2{font:400 clamp(2rem,4vw,3.8rem) Georgia,serif;letter-spacing:-.04em;margin:0}
+.directory-heading>p{color:var(--muted);line-height:1.7;margin:0 0 5px}
+.category-directory .category-banner-grid{padding:0;gap:12px}
+.fabric-directory{grid-template-columns:repeat(4,1fr)}
+.fabric-directory .category-banner{height:220px}
+.lifestyle-heading{margin-top:100px;padding-top:65px;border-top:1px solid var(--line)}
+.lifestyle-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.lifestyle-card{min-height:400px;position:relative;overflow:hidden;background:#e8e2d7;display:flex;flex-direction:column;justify-content:space-between;padding:24px;color:var(--ink);transition:transform .25s,box-shadow .25s}
+.lifestyle-card:hover{transform:translateY(-4px);box-shadow:0 18px 40px #101b3517}
+.lifestyle-number{position:absolute;right:20px;top:18px;font-size:.7rem;font-weight:800;color:#101b3570}
+.lifestyle-art{height:210px;display:grid;place-items:center}
+.lifestyle-art svg{width:92px;height:92px;stroke-width:1.2;color:var(--ink);filter:drop-shadow(0 16px 16px #101b3525)}
+.fragrance{background:linear-gradient(145deg,#eee5d6,#d7c3a3)}
+.body-spray{background:linear-gradient(145deg,#dce5e7,#b9ced2)}
+.cufflinks{background:linear-gradient(145deg,#d9d8d5,#aaa9a7)}
+.lifestyle-card>div:last-child small{font-size:.67rem;text-transform:uppercase;letter-spacing:.14em;color:#795720;font-weight:800}.lifestyle-card h3{font:2rem Georgia;margin:8px 0}.lifestyle-card p{font-size:.82rem;color:#4f5661;margin:0 0 18px}.lifestyle-card strong{display:flex;align-items:center;gap:4px;font-size:.76rem}.category-catalog{background:#f2eee5}.category-catalog:before{content:"Featured from the fabric room";display:block;font:400 clamp(2rem,4vw,3.8rem) Georgia,serif;letter-spacing:-.04em;margin-bottom:35px}
+@media(max-width:900px){.fabric-directory{grid-template-columns:repeat(3,1fr)}.lifestyle-grid{grid-template-columns:repeat(3,1fr)}.directory-heading{grid-template-columns:1fr;gap:20px}}
+@media(max-width:650px){.category-directory{padding:65px 18px}.fabric-directory{grid-template-columns:repeat(2,1fr)}.fabric-directory .category-banner{height:170px}.lifestyle-heading{margin-top:70px;padding-top:50px}.lifestyle-grid{grid-template-columns:1fr}.lifestyle-card{min-height:330px}.lifestyle-art{height:165px}}
+
+/* Product detail */
+.product-detail{background:var(--paper)}
+.breadcrumbs{display:flex;align-items:center;gap:10px;padding:26px clamp(20px,6vw,88px);font-size:.74rem;color:var(--muted);border-bottom:1px solid var(--line)}
+.breadcrumbs b{color:var(--ink);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.product-detail-grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(380px,.92fr);gap:clamp(45px,7vw,110px);padding:65px clamp(20px,7vw,110px) 100px;align-items:start}
+.product-detail-art{aspect-ratio:1/1.08;min-height:570px}
+.product-detail-copy{padding-top:20px}
+.product-detail-copy h1,.missing-product h1{font:400 clamp(2.7rem,5vw,5rem)/1 Georgia,serif;letter-spacing:-.045em;margin:0}
+.detail-price{font-size:1.3rem;font-weight:800;margin:24px 0}.detail-price small{font-size:.8rem;font-weight:400;color:var(--muted)}
+.detail-intro{color:var(--muted);line-height:1.75;margin:0 0 30px;max-width:580px}
+.fabric-specs{border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:0 0 30px}
+.fabric-specs div{display:flex;justify-content:space-between;gap:20px;padding:13px 0;font-size:.8rem}.fabric-specs div+div{border-top:1px solid #ded9cf80}.fabric-specs dt{color:var(--muted)}.fabric-specs dd{margin:0;font-weight:700;text-align:right}
+.yard-selector{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;font-size:.8rem;font-weight:800}.yard-selector>div{display:flex;align-items:center;border:1px solid var(--line)}.yard-selector button{width:42px;height:42px;border:0;background:white;display:grid;place-items:center}.yard-selector b{width:42px;text-align:center}
+.detail-add{width:100%;gap:9px;border:0}.detail-notes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:18px}.detail-notes span{display:grid;grid-template-columns:auto 1fr;column-gap:9px;padding:14px;border:1px solid var(--line)}.detail-notes svg{grid-row:1/3;color:#a66d24}.detail-notes b{font-size:.74rem}.detail-notes small{font-size:.66rem;color:var(--muted);margin-top:3px}
+.related-products{padding:90px clamp(20px,6vw,88px);background:#f2eee5}.missing-product{min-height:65vh;padding:120px 8vw}.missing-product h1{max-width:700px;margin-bottom:35px}
+@media(max-width:900px){.product-detail-grid{grid-template-columns:1fr;gap:40px}.product-detail-art{min-height:0;max-height:720px}.product-detail-copy{padding-top:0}}
+@media(max-width:560px){.product-detail-grid{padding:24px 18px 70px}.product-detail-copy h1{font-size:2.7rem}.detail-notes{grid-template-columns:1fr}.related-products{padding:65px 18px}.breadcrumbs{padding:18px}.product-detail-art{aspect-ratio:4/5}}
