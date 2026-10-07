@@ -7,17 +7,21 @@ export type StorefrontView =
   | "contact";
 
 export type Product = {
+  id?: string;
   name: string;
   category: string;
   price: number;
   color: string;
   texture: string;
   badge?: string;
+  active?: boolean;
 };
 
 export type Category = {
+  id?: string;
   name: string;
   note: string;
+  active?: boolean;
 };
 
 export type LifestyleCategory = Category & {
