@@ -11,10 +11,10 @@ export const SITE_SETTINGS_KEY="hsg-site-settings";
 export type SiteSettings={announcement:string;heroEyebrow:string;heroTitle:string;heroAccent:string;heroDescription:string;primaryLabel:string;primaryHref:string;secondaryLabel:string;secondaryHref:string;trustOne:string;trustTwo:string;imageNote:string;heroImageId?:string};
 export const defaultSiteSettings:SiteSettings={announcement:"New season edit: complimentary Lagos delivery over ₦75,000",heroEyebrow:"The new textile edit",heroTitle:"Find the fabric.",heroAccent:"Make it yours.",heroDescription:"Exceptional textures for defining moments—from everyday silhouettes to once-in-a-lifetime celebrations.",primaryLabel:"Shop new arrivals",primaryHref:"/products?filter=new",secondaryLabel:"Explore collections",secondaryHref:"/category",trustOne:"Nationwide delivery",trustTwo:"Curated quality",imageNote:"Texture you can almost feel"};
 
-export const defaultAdminProducts:Product[]=products.map((product,index)=>({
+export const defaultAdminProducts:Product[]=products.map<Product>((product,index)=>({
   ...product,
   id:`product-${index+1}`,
-  section:"fabric",
+  section:"fabric" as const,
   active:true,
 })).concat(lifestyleCategories.map((item,index)=>({
   id:`accessory-${index+1}`,
@@ -28,10 +28,10 @@ export const defaultAdminProducts:Product[]=products.map((product,index)=>({
   active:true,
 })));
 
-export const defaultAdminCategories:Category[]=catalogCategories.map((category,index)=>({
+export const defaultAdminCategories:Category[]=catalogCategories.map<Category>((category,index)=>({
   ...category,
   id:`category-${index+1}`,
-  section:"fabric",
+  section:"fabric" as const,
   active:true,
 })).concat(lifestyleCategories.map((item,index)=>({
   id:`accessory-category-${index+1}`,
@@ -49,8 +49,8 @@ export function migrateAdminCatalog(){
   let savedCategories:Category[]=[];
   try{savedProducts=JSON.parse(window.localStorage.getItem(ADMIN_PRODUCTS_KEY)||"[]") as Product[]}catch{/* Use defaults below. */}
   try{savedCategories=JSON.parse(window.localStorage.getItem(ADMIN_CATEGORIES_KEY)||"[]") as Category[]}catch{/* Use defaults below. */}
-  const migratedProducts=(savedProducts.length?savedProducts:defaultAdminProducts.filter(product=>product.section==="fabric")).map(product=>({...product,section:product.section??"fabric" as const}));
-  const migratedCategories=(savedCategories.length?savedCategories:defaultAdminCategories.filter(category=>category.section==="fabric")).map(category=>({...category,section:category.section??"fabric" as const}));
+  const migratedProducts:Product[]=(savedProducts.length?savedProducts:defaultAdminProducts.filter(product=>product.section==="fabric")).map(product=>({...product,section:product.section??"fabric"}));
+  const migratedCategories:Category[]=(savedCategories.length?savedCategories:defaultAdminCategories.filter(category=>category.section==="fabric")).map(category=>({...category,section:category.section??"fabric"}));
   if(!migratedProducts.some(product=>product.section==="accessories"))migratedProducts.push(...defaultAdminProducts.filter(product=>product.section==="accessories"));
   if(!migratedCategories.some(category=>category.section==="accessories"))migratedCategories.push(...defaultAdminCategories.filter(category=>category.section==="accessories"));
   window.localStorage.setItem(ADMIN_PRODUCTS_KEY,JSON.stringify(migratedProducts));
