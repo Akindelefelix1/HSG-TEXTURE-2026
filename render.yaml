@@ -1,11 +1,10 @@
 services:
   - type: web
     name: hsg-texture
-    runtime: node
+    runtime: static
     plan: free
     buildCommand: npm ci && npm run build
-    startCommand: npm start
-    healthCheckPath: /
+    staticPublishPath: ./out
     autoDeployTrigger: commit
     envVars:
       - key: NODE_VERSION
