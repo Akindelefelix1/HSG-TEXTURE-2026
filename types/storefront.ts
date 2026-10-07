@@ -8,17 +8,20 @@ export type StorefrontView =
 
 export type Product = {
   id?: string;
+  section?: "fabric" | "accessories";
   name: string;
   category: string;
   price: number;
   color: string;
   texture: string;
+  description?: string;
   badge?: string;
   active?: boolean;
 };
 
 export type Category = {
   id?: string;
+  section?: "fabric" | "accessories";
   name: string;
   note: string;
   active?: boolean;
