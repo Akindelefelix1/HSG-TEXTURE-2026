@@ -21,5 +21,6 @@ export type Category = {
 };
 
 export type LifestyleCategory = Category & {
-  kind: "fragrance" | "body-spray" | "cufflinks";
+  price: number;
+  kind: "fragrance" | "body-spray" | "perfume-oil" | "cufflinks" | "ofi";
 };

@@ -37,18 +37,22 @@ export const heritageCategories: Category[] = [
 ];
 
 export const catalogCategories: Category[] = [
+  { name: "Seven Star", note: "Distinguished suiting" },
+  { name: "German Wool", note: "Refined weight & finish" },
+  { name: "Cashmere", note: "Exceptionally soft handle" },
+  { name: "Stripes", note: "Sharp directional style" },
+  { name: "Scabal", note: "Luxury tailoring cloth" },
   { name: "Aso-Oke", note: "Ceremonial heritage weaves" },
-  { name: "Velvet", note: "Rich texture with a soft finish" },
-  { name: "Linen", note: "Breathable cloth with natural character" },
   { name: "Adire", note: "Indigo resist-dyed tradition" },
   { name: "Satin", note: "Fluid drape with an elegant sheen" },
   { name: "Ankara", note: "Bold colour and expressive pattern" },
   { name: "Crepe", note: "Refined texture with graceful movement" },
-  { name: "Lace", note: "Detailed occasion-ready fabric" },
 ];
 
 export const lifestyleCategories: LifestyleCategory[] = [
-  { name: "Perfume", note: "Signature scents with presence", kind: "fragrance" },
-  { name: "Body Spray", note: "Fresh, effortless everyday scent", kind: "body-spray" },
-  { name: "Cufflinks", note: "The finishing detail for sharp dressing", kind: "cufflinks" },
+  { name: "Perfume", note: "Signature scents with presence", kind: "fragrance", price: 5000 },
+  { name: "Body Spray", note: "Fresh, effortless everyday scent", kind: "body-spray", price: 3000 },
+  { name: "Perfume Oil", note: "A concentrated signature scent", kind: "perfume-oil", price: 2500 },
+  { name: "Cufflinks", note: "The finishing detail for sharp dressing", kind: "cufflinks", price: 5000 },
+  { name: "Ofi", note: "A traditional textile with character", kind: "ofi", price: 2000 },
 ];
