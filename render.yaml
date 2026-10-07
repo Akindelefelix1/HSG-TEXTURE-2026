@@ -4,7 +4,7 @@ services:
     runtime: static
     plan: free
     buildCommand: npm ci && npm run build
-    staticPublishPath: ./out
+    staticPublishPath: ./dist
     autoDeployTrigger: commit
     envVars:
       - key: NODE_VERSION
