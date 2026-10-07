@@ -15,8 +15,16 @@ export type Product = {
   color: string;
   texture: string;
   description?: string;
+  media?: ProductMedia[];
+  coverMediaId?: string;
   badge?: string;
   active?: boolean;
+};
+
+export type ProductMedia = {
+  id: string;
+  name: string;
+  type: "image" | "video";
 };
 
 export type Category = {
