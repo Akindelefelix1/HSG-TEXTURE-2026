@@ -1,0 +1,17 @@
+{
+  "name": "HSG Texture",
+  "short_name": "HSG Texture",
+  "description": "Exceptional fabrics from Hisgrace Texture.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#071024",
+  "icons": [
+    {
+      "src": "/hsg-texture-logo.jpg?v=2",
+      "sizes": "1080x1080",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ]
+}
