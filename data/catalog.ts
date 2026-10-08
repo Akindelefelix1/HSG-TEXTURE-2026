@@ -1,9 +1,29 @@
 import type { Category, LifestyleCategory, Product } from "@/types/storefront";
 
+const featuredCollectionProducts: Product[] = [
+  ["Seven Star", "seven-star", 18500],
+  ["German Wool", "german-wool", 22500],
+  ["Irish", "irish", 19500],
+  ["Cashmere", "cashmere", 24500],
+  ["Seven Nine Eight", "seven-nine-eight", 20500],
+  ["Nine Star", "nine-star", 19800],
+  ["Jokonso", "jokonso", 17500],
+].flatMap(([category, slug, price]) => Array.from({ length: 5 }, (_, index) => ({
+  name: `${category} ${String(index + 1).padStart(2, "0")}`,
+  category: String(category),
+  price: Number(price) + index * 500,
+  color: "#786a58",
+  texture: "woven",
+  image: `/featured-collections/${slug}-${String(index + 1).padStart(2, "0")}.png`,
+  badge: index === 0 ? "Featured" : undefined,
+}))) as Product[];
+
 export const products: Product[] = [
-  { name: "Aso-Oke Heritage Stripe", category: "Aso Oke", price: 18500, color: "#183b8f", texture: "woven", badge: "Bestseller" },
-  { name: "Oyo Dawn Aso-Oke", category: "Aso Oke", price: 19800, color: "#b66b46", texture: "woven", badge: "New" },
-  { name: "Royal Loom Aso-Oke", category: "Aso Oke", price: 21500, color: "#5d3978", texture: "woven" },
+  { name: "Aso-Oke Heritage Stripe", category: "Aso Oke", price: 18500, color: "#183b8f", texture: "woven", badge: "Bestseller", image: "/featured-collections/aso-oke-01.png" },
+  { name: "Oyo Dawn Aso-Oke", category: "Aso Oke", price: 19800, color: "#b66b46", texture: "woven", badge: "New", image: "/featured-collections/aso-oke-02.png" },
+  { name: "Royal Loom Aso-Oke", category: "Aso Oke", price: 21500, color: "#5d3978", texture: "woven", image: "/featured-collections/aso-oke-03.png" },
+  { name: "Ceremonial Gold Aso-Oke", category: "Aso Oke", price: 22500, color: "#b3843f", texture: "woven", image: "/featured-collections/aso-oke-04.png" },
+  { name: "Indigo Crown Aso-Oke", category: "Aso Oke", price: 23500, color: "#283f72", texture: "woven", image: "/featured-collections/aso-oke-05.png" },
   { name: "Saffron Royal Velvet", category: "Velvet", price: 14800, color: "#d69a20", texture: "velvet", badge: "New" },
   { name: "Forest Evening Velvet", category: "Velvet", price: 15200, color: "#174f3c", texture: "velvet" },
   { name: "Burgundy Opera Velvet", category: "Velvet", price: 15800, color: "#711f32", texture: "velvet", badge: "Limited" },
@@ -17,6 +37,7 @@ export const products: Product[] = [
   { name: "Champagne Bridal Lace", category: "Lace", price: 24500, color: "#c9a96e", texture: "lace", badge: "Limited" },
   { name: "Pearl Garden Lace", category: "Lace", price: 22800, color: "#ded2bd", texture: "lace", badge: "New" },
   { name: "Ruby Ceremony Lace", category: "Lace", price: 23900, color: "#9c3041", texture: "lace" },
+  ...featuredCollectionProducts,
 ];
 
 export const storyCategories: Category[] = [

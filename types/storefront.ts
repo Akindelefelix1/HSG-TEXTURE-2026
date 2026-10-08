@@ -15,6 +15,7 @@ export type Product = {
   color: string;
   texture: string;
   description?: string;
+  image?: string;
   media?: ProductMedia[];
   coverMediaId?: string;
   badge?: string;
