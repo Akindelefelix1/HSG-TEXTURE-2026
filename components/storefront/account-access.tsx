@@ -14,14 +14,16 @@ type AuthClient = ReturnType<
   typeof createAuthClient<BetterAuthVanillaAdapterInstance>
 >;
 
+const DEFAULT_API_URL = "https://hsg-be.onrender.com";
+
 let authClient: AuthClient | undefined;
 
 function getAuthServices() {
   const authUrl = process.env.NEXT_PUBLIC_NEON_AUTH_URL;
-  const apiUrl = process.env.NEXT_PUBLIC_HSG_API_URL;
-  if (!authUrl || !apiUrl) {
+  const apiUrl = process.env.NEXT_PUBLIC_HSG_API_URL || DEFAULT_API_URL;
+  if (!authUrl) {
     throw new Error(
-      "Account access is not configured. Set NEXT_PUBLIC_NEON_AUTH_URL and NEXT_PUBLIC_HSG_API_URL before building the storefront.",
+      "Account access is not configured. Set NEXT_PUBLIC_NEON_AUTH_URL before building the storefront.",
     );
   }
 

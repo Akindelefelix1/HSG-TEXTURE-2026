@@ -50,7 +50,7 @@ Local tool usage metrics are disabled by default. Set `WRANGLER_SEND_METRICS=tru
 
 ## Storefront Neon Accounts
 
-The storefront footer supports Neon Managed Better Auth email/password sign-up and sign-in. Set `NEXT_PUBLIC_NEON_AUTH_URL` to the Neon Auth Base URL and `NEXT_PUBLIC_HSG_API_URL` to the BE origin (for example, `http://localhost:4000`) before building; this static site embeds both values at build time. The footer signs users up or in with Neon, obtains a short-lived access token, and verifies it with `GET /api/v1/auth/me` on the BE.
+The storefront footer supports Neon Managed Better Auth email/password sign-up and sign-in. Set `NEXT_PUBLIC_NEON_AUTH_URL` to the Neon Auth Base URL before building. Account verification uses the deployed BE at `https://hsg-be.onrender.com` by default; set `NEXT_PUBLIC_HSG_API_URL` to override it for another environment (for example, `http://localhost:4000`). This static site embeds configured values at build time. The footer signs users up or in with Neon, obtains a short-lived access token, and verifies it with `GET /api/v1/auth/me` on the BE.
 
 Add the storefront origin to Neon Auth's trusted domains and to the BE's `CORS_ORIGINS`. Neon Auth owns account storage and session management; the BE only validates Neon tokens and resolves user roles.
 
