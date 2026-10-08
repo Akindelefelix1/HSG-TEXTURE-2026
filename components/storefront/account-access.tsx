@@ -154,7 +154,13 @@ export function AccountAccess() {
               {mode === "signup" && (
                 <label>
                   Full name
-                  <input name="name" autoComplete="name" required maxLength={120} />
+                  <input
+                    name="name"
+                    autoComplete="name"
+                    placeholder="Enter your full name"
+                    required
+                    maxLength={120}
+                  />
                 </label>
               )}
               <label>
@@ -163,6 +169,7 @@ export function AccountAccess() {
                   name="email"
                   type="email"
                   autoComplete="email"
+                  placeholder="you@example.com"
                   required
                   maxLength={254}
                 />
@@ -173,6 +180,7 @@ export function AccountAccess() {
                   name="password"
                   type="password"
                   autoComplete={mode === "signup" ? "new-password" : "current-password"}
+                  placeholder={mode === "signup" ? "Create a password" : "Enter your password"}
                   required
                   minLength={8}
                   maxLength={128}
