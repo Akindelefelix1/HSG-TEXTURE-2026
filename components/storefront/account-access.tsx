@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { createAuthClient } from "@neondatabase/neon-js/auth";
 import {
   BetterAuthVanillaAdapter,
@@ -50,12 +50,22 @@ export function AccountAccess() {
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
+  const [messageTitle, setMessageTitle] = useState("");
   const [message, setMessage] = useState("");
+  const [toastMessage, setToastMessage] = useState("");
+
+  useEffect(() => {
+    if (!toastMessage) return;
+    const timeout = window.setTimeout(() => setToastMessage(""), 4500);
+    return () => window.clearTimeout(timeout);
+  }, [toastMessage]);
 
   const showForm = (nextMode: AccountMode) => {
     setMode(nextMode);
     setError("");
+    setMessageTitle("");
     setMessage("");
+    setToastMessage("");
     setOpen(true);
   };
 
@@ -89,9 +99,12 @@ export function AccountAccess() {
       const { data: tokenData, error: tokenError } = await auth.token();
       if (tokenError) throw new Error(tokenError.message);
       if (!tokenData?.token) {
+        setMessageTitle(
+          accountCreated ? "Account created successfully" : "Sign-in needs attention",
+        );
         setMessage(
           accountCreated
-            ? "Your account was created. Check your email if verification is required, then sign in."
+            ? "Your HSG Texture account was created successfully. Check your email if Neon requires verification, then sign in."
             : "Neon signed you in, but did not return an access token for HSG verification.",
         );
         return;
@@ -104,15 +117,30 @@ export function AccountAccess() {
         throw new Error(`HSG account verification failed (HTTP ${response.status}).`);
       }
       const user = (await response.json()) as ApiUser;
-      setMessage(`Welcome${user.name ? `, ${user.name}` : ""}. Your account is ready.`);
+      if (!accountCreated) {
+        setOpen(false);
+        setToastMessage(
+          `Signed in successfully${user.name ? `, ${user.name}` : ""}. Welcome back!`,
+        );
+        return;
+      }
+      setMessageTitle(
+        "Account created successfully",
+      );
+      setMessage(
+        `Your HSG Texture account was created successfully${user.name ? `, ${user.name}` : ""}. Welcome!`,
+      );
     } catch (cause) {
       const details =
         cause instanceof Error ? cause.message : "An unexpected error occurred.";
-      setError(
-        accountCreated
-          ? `Your Neon account was created, but HSG could not verify it: ${details}`
-          : details,
-      );
+      if (accountCreated) {
+        setMessageTitle("Account created successfully");
+        setMessage(
+          `Your HSG Texture account was created successfully. HSG could not verify your session yet: ${details}`,
+        );
+      } else {
+        setError(details);
+      }
     } finally {
       setPending(false);
     }
@@ -124,6 +152,12 @@ export function AccountAccess() {
         <button type="button" onClick={() => showForm("signup")}>Create an account</button>
         <button type="button" onClick={() => showForm("signin")}>Sign in</button>
       </div>
+      {toastMessage && (
+        <div className="account-success-toast" role="status" aria-live="polite">
+          <span aria-hidden="true">✓</span>
+          {toastMessage}
+        </div>
+      )}
       {open && (
         <div className="account-modal-backdrop" onClick={() => setOpen(false)}>
           <section
@@ -187,7 +221,12 @@ export function AccountAccess() {
                 />
               </label>
               {error && <p className="account-form-message error" role="alert">{error}</p>}
-              {message && <p className="account-form-message" role="status">{message}</p>}
+              {message && (
+                <div className="account-form-message" role="status" aria-live="polite">
+                  <b>{messageTitle}</b>
+                  <p>{message}</p>
+                </div>
+              )}
               <button className="account-submit" type="submit" disabled={pending}>
                 {pending
                   ? "Please wait..."
