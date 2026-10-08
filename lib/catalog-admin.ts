@@ -3,8 +3,6 @@ import type { Category, Product } from "@/types/storefront";
 
 export const ADMIN_PRODUCTS_KEY="hsg-admin-products";
 export const ADMIN_CATEGORIES_KEY="hsg-admin-categories";
-export const ADMIN_ACCOUNT_KEY="hsg-admin-account";
-export const ADMIN_SESSION_KEY="hsg-admin-session";
 export const ADMIN_CATALOG_VERSION_KEY="hsg-admin-catalog-version";
 export const SITE_SETTINGS_KEY="hsg-site-settings";
 export const STORY_SETTINGS_KEY="hsg-story-settings";

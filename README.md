@@ -54,6 +54,10 @@ The storefront footer supports Neon Managed Better Auth email/password sign-up a
 
 Add the storefront origin to Neon Auth's trusted domains and to the BE's `CORS_ORIGINS`. Neon Auth owns account storage and session management; the BE only validates Neon tokens and resolves user roles.
 
+## Admin Sign-In
+
+The `/admin` page signs in with Neon Managed Better Auth and verifies the resulting token against `GET /api/v1/auth/me`. Only accounts whose BE-verified Neon role is `admin` can open the admin dashboard. Create the account through Neon Auth, then grant its admin role in Neon Console under **Auth → Users**. Browser-local passwords do not grant admin access.
+
 ## Workspace Auth Headers
 
 Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.

@@ -5,24 +5,49 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Check, ChevronRight, Edit3, Eye, EyeOff, FolderPlus, ImagePlus, LayoutDashboard, LogOut, MessageSquareQuote, Monitor, Package, Plus, Search, Settings, Trash2, X } from "lucide-react";
-import { ADMIN_ACCOUNT_KEY, ADMIN_CATEGORIES_KEY, ADMIN_PRODUCTS_KEY, ADMIN_SESSION_KEY, SITE_SETTINGS_KEY, STORY_SETTINGS_KEY, defaultAdminCategories, defaultAdminProducts, defaultSiteSettings, defaultStorySettings, makeAdminId, migrateAdminCatalog, type CustomerFeedback, type SiteSettings, type StorySettings } from "@/lib/catalog-admin";
+import { createAuthClient } from "@neondatabase/neon-js/auth";
+import { BetterAuthVanillaAdapter, type BetterAuthVanillaAdapterInstance } from "@neondatabase/neon-js/auth/vanilla/adapters";
+import { ADMIN_CATEGORIES_KEY, ADMIN_PRODUCTS_KEY, SITE_SETTINGS_KEY, STORY_SETTINGS_KEY, defaultAdminCategories, defaultAdminProducts, defaultSiteSettings, defaultStorySettings, makeAdminId, migrateAdminCatalog, type CustomerFeedback, type SiteSettings, type StorySettings } from "@/lib/catalog-admin";
 import { formatNaira } from "@/lib/storefront";
 import type { Category, Product, ProductMedia } from "@/types/storefront";
 import { AppDialog } from "@/components/ui/app-dialog";
 import { deleteProductMedia, getProductMedia, saveProductMedia } from "@/lib/product-media";
 
-type AdminAccount={email:string;passwordHash:string};
+type AdminAuthClient=ReturnType<typeof createAuthClient<BetterAuthVanillaAdapterInstance>>;
 type AdminTab="dashboard"|"products"|"categories"|"story"|"settings";
 type CatalogSection="fabric"|"accessories";
 type DialogState={title:string;description:string;confirmLabel?:string;cancelLabel?:string|null;tone?:"default"|"danger"|"success";onConfirm?:()=>void};
 type ProductDraft={section:CatalogSection;name:string;category:string;price:string;color:string;texture:string;description:string;badge:string;active:boolean};
 type MediaDraft=ProductMedia&{url:string;file?:File};
 const emptyProduct:ProductDraft={section:"fabric",name:"",category:"",price:"",color:"#183b8f",texture:"woven",description:"",badge:"",active:true};
+const DEFAULT_API_URL="https://hsg-be.onrender.com";
+let adminAuthClient:AdminAuthClient|undefined;
 
-async function hashPassword(value:string){
-  const bytes=new TextEncoder().encode(value);
-  const digest=await crypto.subtle.digest("SHA-256",bytes);
-  return Array.from(new Uint8Array(digest)).map(byte=>byte.toString(16).padStart(2,"0")).join("");
+function getAdminAuthServices(){
+  const authUrl=process.env.NEXT_PUBLIC_NEON_AUTH_URL?.trim();
+  const apiUrl=process.env.NEXT_PUBLIC_HSG_API_URL?.trim()||DEFAULT_API_URL;
+  if(!authUrl)throw new Error("Admin sign-in is not configured. Set NEXT_PUBLIC_NEON_AUTH_URL before building the storefront.");
+  let parsedAuthUrl:URL;let parsedApiUrl:URL;
+  try{parsedAuthUrl=new URL(authUrl);parsedApiUrl=new URL(apiUrl)}catch{throw new Error("Set valid absolute URLs for NEXT_PUBLIC_NEON_AUTH_URL and NEXT_PUBLIC_HSG_API_URL.")}
+  const isLocalhost=(url:URL)=>["localhost","127.0.0.1","[::1]"].includes(url.hostname);
+  if(parsedAuthUrl.protocol!=="https:"&&!isLocalhost(parsedAuthUrl))throw new Error("NEXT_PUBLIC_NEON_AUTH_URL must use HTTPS outside localhost.");
+  if((parsedApiUrl.protocol!=="https:"&&!isLocalhost(parsedApiUrl))||parsedApiUrl.pathname!=="/"||parsedApiUrl.search||parsedApiUrl.hash)throw new Error("NEXT_PUBLIC_HSG_API_URL must be an HTTPS API origin (localhost is allowed for development).");
+  adminAuthClient??=createAuthClient(authUrl,{adapter:BetterAuthVanillaAdapter({fetchOptions:{credentials:"include"}})});
+  return{auth:adminAuthClient,apiUrl:apiUrl.replace(/\/+$/,"")};
+}
+
+async function verifyAdminRole(apiUrl:string,token:string){
+  let response:Response;
+  try{
+    response=await fetch(`${apiUrl}/api/v1/auth/me`,{headers:{Authorization:`Bearer ${token}`}});
+  }catch(cause){
+    if(cause instanceof TypeError)throw new Error("The HSG API could not be reached. Check the connection and that this storefront origin is allowed in the BE CORS_ORIGINS.");
+    throw cause;
+  }
+  if(response.status===401)throw new Error("The API could not verify this Neon account. Make sure the Neon Auth project matches the BE database.");
+  if(!response.ok)throw new Error(`Admin access verification failed (HTTP ${response.status}).`);
+  const user:unknown=await response.json();
+  if(!user||typeof user!=="object"||!("role" in user)||user.role!=="admin")throw new Error("This Neon account does not have admin access. In Neon Console, open Auth → Users and grant this account the admin role.");
 }
 
 function readLocal<T>(key:string,fallback:T):T{
@@ -32,7 +57,7 @@ function readLocal<T>(key:string,fallback:T):T{
 export function AdminDashboard(){
   const [ready,setReady]=useState(false);
   const [authenticated,setAuthenticated]=useState(false);
-  const [hasAccount,setHasAccount]=useState(false);
+  const [authPending,setAuthPending]=useState(false);
   const [authError,setAuthError]=useState("");
   const [tab,setTab]=useState<AdminTab>("dashboard");
   const [catalogSection,setCatalogSection]=useState<CatalogSection>("fabric");
@@ -57,14 +82,26 @@ export function AdminDashboard(){
 
   useEffect(()=>{
     migrateAdminCatalog();
-    // Browser storage is the external source of truth for the local admin bootstrap.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setHasAccount(Boolean(window.localStorage.getItem(ADMIN_ACCOUNT_KEY)));
-    setAuthenticated(window.sessionStorage.getItem(ADMIN_SESSION_KEY)==="active");
     setProducts(readLocal(ADMIN_PRODUCTS_KEY,defaultAdminProducts));
     setCategories(readLocal(ADMIN_CATEGORIES_KEY,defaultAdminCategories));
     const settings=readLocal(SITE_SETTINGS_KEY,defaultSiteSettings);setSiteSettings(settings);setStorySettings(readLocal(STORY_SETTINGS_KEY,defaultStorySettings));if(settings.heroImageId)void getProductMedia(settings.heroImageId).then(blob=>{if(blob)setHeroPreview(URL.createObjectURL(blob))});
-    setReady(true);
+    let mounted=true;
+    const restoreAdminSession=async()=>{
+      try{
+        const{auth,apiUrl}=getAdminAuthServices();
+        const{data,error}=await auth.token();
+        if(error)throw new Error(error.message??"Could not restore the Neon session.");
+        if(!data?.token)return;
+        await verifyAdminRole(apiUrl,data.token);
+        if(mounted)setAuthenticated(true);
+      }catch(cause){
+        if(mounted)setAuthError(cause instanceof Error?cause.message:"Could not verify the admin session.");
+      }finally{
+        if(mounted)setReady(true);
+      }
+    };
+    void restoreAdminSession();
+    return()=>{mounted=false};
   },[]);
 
   useEffect(()=>{
@@ -86,23 +123,37 @@ export function AdminDashboard(){
   const flash=(message:string)=>{setNotice(message);window.setTimeout(()=>setNotice(""),2400)};
 
   const authenticate=async(event:FormEvent<HTMLFormElement>)=>{
-    event.preventDefault();setAuthError("");
-    const data=new FormData(event.currentTarget);
-    const email=String(data.get("email")||"").trim().toLowerCase();
-    const password=String(data.get("password")||"");
-    if(!email||password.length<8){setAuthError("Enter a valid email and a password of at least 8 characters.");return}
-    const passwordHash=await hashPassword(password);
-    if(!hasAccount){
-      window.localStorage.setItem(ADMIN_ACCOUNT_KEY,JSON.stringify({email,passwordHash} satisfies AdminAccount));
-      setHasAccount(true);
-    }else{
-      const account=readLocal<AdminAccount|null>(ADMIN_ACCOUNT_KEY,null);
-      if(!account||account.email!==email||account.passwordHash!==passwordHash){setAuthError("The email or password is incorrect.");return}
+    event.preventDefault();setAuthError("");setAuthPending(true);
+    try{
+      const{auth,apiUrl}=getAdminAuthServices();
+      const data=new FormData(event.currentTarget);
+      const email=String(data.get("email")||"").trim().toLowerCase();
+      const password=String(data.get("password")||"");
+      const result=await auth.signIn.email({email,password});
+      if(result.error)throw new Error(result.error.message??"Neon could not sign you in.");
+      const tokenResult=await auth.token();
+      if(tokenResult.error)throw new Error(tokenResult.error.message??"Could not obtain a Neon access token.");
+      if(!tokenResult.data?.token)throw new Error("Neon signed you in but did not return an access token.");
+      await verifyAdminRole(apiUrl,tokenResult.data.token);
+      setAuthenticated(true);
+    }catch(cause){
+      setAuthError(cause instanceof Error?cause.message:"Admin sign-in failed.");
+    }finally{
+      setAuthPending(false);
     }
-    window.sessionStorage.setItem(ADMIN_SESSION_KEY,"active");setAuthenticated(true);
   };
 
-  const logout=()=>{window.sessionStorage.removeItem(ADMIN_SESSION_KEY);setAuthenticated(false);setTab("dashboard")};
+  const logout=async()=>{
+    setAuthError("");
+    try{
+      const{auth}=getAdminAuthServices();
+      const result=await auth.signOut();
+      if(result.error)throw new Error(result.error.message??"Neon sign-out failed.");
+      setAuthenticated(false);setTab("dashboard");
+    }catch(cause){
+      setAuthError(cause instanceof Error?cause.message:"Admin sign-out failed.");
+    }
+  };
   const activeProducts=products.filter(product=>product.active!==false);
   const inactiveProducts=products.length-activeProducts.length;
   const activeCategories=categories.filter(category=>category.active!==false);
@@ -139,7 +190,7 @@ export function AdminDashboard(){
   const updateHeroImage=async(file?:File)=>{if(!file||!file.type.startsWith("image/"))return;const id=siteSettings.heroImageId??"site-hero-image";await saveProductMedia(id,file);if(heroPreview)URL.revokeObjectURL(heroPreview);setHeroPreview(URL.createObjectURL(file));setSiteSettings(current=>({...current,heroImageId:id}))};
 
   if(!ready)return <main className="admin-loading">Loading admin…</main>;
-  if(!authenticated)return <main className="admin-auth"><section className="admin-login-card"><Link href="/" className="admin-login-logo"><span className="brand-logo" aria-hidden="true"/></Link><p className="eyebrow">Store administration</p><h1>{hasAccount?"Welcome back":"Create your admin account"}</h1><p>{hasAccount?"Sign in to manage the Hisgrace Texture storefront.":"Set up the first administrator for this browser."}</p><form onSubmit={authenticate}><label>Email address<input name="email" type="email" required autoComplete="username" placeholder="admin@hisgracetexture.com"/></label><label>Password<input name="password" type="password" required minLength={8} autoComplete={hasAccount?"current-password":"new-password"} placeholder="At least 8 characters"/></label>{authError&&<div className="admin-auth-error" role="alert">{authError}</div>}<button type="submit">{hasAccount?"Sign in":"Create account and continue"} <ChevronRight size={17}/></button></form><Link href="/">← Return to storefront</Link></section></main>;
+  if(!authenticated)return <main className="admin-auth"><section className="admin-login-card"><Link href="/" className="admin-login-logo"><span className="brand-logo" aria-hidden="true"/></Link><p className="eyebrow">Store administration</p><h1>Welcome back</h1><p>Sign in with your Neon admin account to manage the Hisgrace Texture storefront.</p><form onSubmit={authenticate}><label>Email address<input name="email" type="email" required autoComplete="username" placeholder="admin@hisgracetexture.com" disabled={authPending}/></label><label>Password<input name="password" type="password" required minLength={8} autoComplete="current-password" placeholder="Enter your password" disabled={authPending}/></label>{authError&&<div className="admin-auth-error" role="alert">{authError}</div>}<button type="submit" disabled={authPending}>{authPending?"Verifying admin access...":"Sign in"} <ChevronRight size={17}/></button></form><Link href="/">← Return to storefront</Link></section></main>;
 
   const navigation:[AdminTab,string,React.ReactNode][]=[["dashboard","Overview",<LayoutDashboard key="d" size={18}/>],["products","Products",<Package key="p" size={18}/>],["categories","Categories",<FolderPlus key="c" size={18}/>],["story","Our Story",<MessageSquareQuote key="o" size={18}/>],["settings","Settings",<Settings key="s" size={18}/>]];
   return <div className="admin-shell"><aside className="admin-sidebar"><Link href="/" className="admin-brand"><span className="brand-logo" aria-hidden="true"/><b>Admin</b></Link><nav>{navigation.map(([value,label,icon])=><button key={value} className={tab===value?"active":""} onClick={()=>setTab(value)}>{icon}{label}</button>)}</nav><div className="admin-sidebar-bottom"><Link href="/" target="_blank"><Eye size={17}/> View storefront</Link><button onClick={logout}><LogOut size={17}/> Sign out</button></div></aside><main className="admin-main"><header className="admin-topbar"><div><small>Hisgrace Texture</small><h1>{navigation.find(item=>item[0]===tab)?.[1]}</h1></div><span className="admin-avatar">A</span></header>{notice&&<div className="admin-notice" role="status"><Check size={17}/>{notice}</div>}

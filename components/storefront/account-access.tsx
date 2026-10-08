@@ -19,22 +19,39 @@ const DEFAULT_API_URL = "https://hsg-be.onrender.com";
 let authClient: AuthClient | undefined;
 
 function getAuthServices() {
-  const authUrl = process.env.NEXT_PUBLIC_NEON_AUTH_URL;
-  const apiUrl = process.env.NEXT_PUBLIC_HSG_API_URL || DEFAULT_API_URL;
+  const authUrl = process.env.NEXT_PUBLIC_NEON_AUTH_URL?.trim();
+  const apiUrl =
+    process.env.NEXT_PUBLIC_HSG_API_URL?.trim() || DEFAULT_API_URL;
   if (!authUrl) {
     throw new Error(
       "Account access is not configured. Set NEXT_PUBLIC_NEON_AUTH_URL before building the storefront.",
     );
   }
 
+  let parsedAuthUrl: URL;
   let parsedApiUrl: URL;
   try {
+    parsedAuthUrl = new URL(authUrl);
     parsedApiUrl = new URL(apiUrl);
   } catch {
-    throw new Error("NEXT_PUBLIC_HSG_API_URL must be a valid absolute URL.");
+    throw new Error(
+      "Set valid absolute URLs for NEXT_PUBLIC_NEON_AUTH_URL and NEXT_PUBLIC_HSG_API_URL.",
+    );
   }
-  if (parsedApiUrl.protocol !== "https:" && parsedApiUrl.hostname !== "localhost") {
-    throw new Error("NEXT_PUBLIC_HSG_API_URL must use HTTPS outside localhost.");
+  const isLocalhost = (url: URL) =>
+    ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if (parsedAuthUrl.protocol !== "https:" && !isLocalhost(parsedAuthUrl)) {
+    throw new Error("NEXT_PUBLIC_NEON_AUTH_URL must use HTTPS outside localhost.");
+  }
+  if (
+    (parsedApiUrl.protocol !== "https:" && !isLocalhost(parsedApiUrl)) ||
+    parsedApiUrl.pathname !== "/" ||
+    parsedApiUrl.search ||
+    parsedApiUrl.hash
+  ) {
+    throw new Error(
+      "NEXT_PUBLIC_HSG_API_URL must be an HTTPS API origin (localhost is allowed for development).",
+    );
   }
 
   authClient ??= createAuthClient(authUrl, {
@@ -53,6 +70,8 @@ export function AccountAccess() {
   const [messageTitle, setMessageTitle] = useState("");
   const [message, setMessage] = useState("");
   const [toastMessage, setToastMessage] = useState("");
+  const [email, setEmail] = useState("");
+  const [existingAccount, setExistingAccount] = useState(false);
 
   useEffect(() => {
     if (!toastMessage) return;
@@ -63,6 +82,7 @@ export function AccountAccess() {
   const showForm = (nextMode: AccountMode) => {
     setMode(nextMode);
     setError("");
+    setExistingAccount(false);
     setMessageTitle("");
     setMessage("");
     setToastMessage("");
@@ -72,6 +92,7 @@ export function AccountAccess() {
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
+    setExistingAccount(false);
     setMessage("");
     setPending(true);
 
@@ -91,7 +112,16 @@ export function AccountAccess() {
           : await auth.signIn.email({ email, password });
 
       if (result.error) {
-        setError(result.error.message ?? "Neon could not process your account request.");
+        const errorMessage =
+          result.error.message ?? "Neon could not process your account request.";
+        const accountExists =
+          mode === "signup" && /already exists/i.test(errorMessage);
+        setExistingAccount(accountExists);
+        setError(
+          accountExists
+            ? "An account already exists with this email. Sign in instead."
+            : errorMessage,
+        );
         return;
       }
       accountCreated = mode === "signup";
@@ -110,9 +140,17 @@ export function AccountAccess() {
         return;
       }
 
-      const response = await fetch(`${apiUrl}/api/v1/auth/me`, {
-        headers: { Authorization: `Bearer ${tokenData.token}` },
-      });
+      let response: Response;
+      try {
+        response = await fetch(`${apiUrl}/api/v1/auth/me`, {
+          headers: { Authorization: `Bearer ${tokenData.token}` },
+        });
+      } catch (cause) {
+        if (!(cause instanceof TypeError)) throw cause;
+        throw new Error(
+          "The HSG API could not be reached. Check the connection and that this storefront origin is allowed in the BE CORS_ORIGINS.",
+        );
+      }
       if (!response.ok) {
         throw new Error(`HSG account verification failed (HTTP ${response.status}).`);
       }
@@ -159,7 +197,12 @@ export function AccountAccess() {
         </div>
       )}
       {open && (
-        <div className="account-modal-backdrop" onClick={() => setOpen(false)}>
+        <div
+          className="account-modal-backdrop"
+          onClick={() => {
+            if (!pending) setOpen(false);
+          }}
+        >
           <section
             className="account-modal"
             role="dialog"
@@ -171,7 +214,10 @@ export function AccountAccess() {
               className="account-modal-close"
               type="button"
               aria-label="Close account form"
-              onClick={() => setOpen(false)}
+              disabled={pending}
+              onClick={() => {
+                if (!pending) setOpen(false);
+              }}
             >
               <X size={19} />
             </button>
@@ -194,6 +240,7 @@ export function AccountAccess() {
                     placeholder="Enter your full name"
                     required
                     maxLength={120}
+                    disabled={pending}
                   />
                 </label>
               )}
@@ -204,8 +251,15 @@ export function AccountAccess() {
                   type="email"
                   autoComplete="email"
                   placeholder="you@example.com"
+                  value={email}
+                  onChange={(event) => {
+                    setEmail(event.target.value);
+                    setExistingAccount(false);
+                    setError("");
+                  }}
                   required
                   maxLength={254}
+                  disabled={pending}
                 />
               </label>
               <label>
@@ -218,9 +272,23 @@ export function AccountAccess() {
                   required
                   minLength={8}
                   maxLength={128}
+                  disabled={pending}
                 />
               </label>
-              {error && <p className="account-form-message error" role="alert">{error}</p>}
+              {error && (
+                <div className="account-form-message error" role="alert">
+                  {error}
+                  {existingAccount && (
+                    <button
+                      className="account-existing-signin"
+                      type="button"
+                      onClick={() => showForm("signin")}
+                    >
+                      Sign in
+                    </button>
+                  )}
+                </div>
+              )}
               {message && (
                 <div className="account-form-message" role="status" aria-live="polite">
                   <b>{messageTitle}</b>
@@ -239,6 +307,7 @@ export function AccountAccess() {
               {mode === "signup" ? "Already have an account?" : "New to HSG Texture?"}{" "}
               <button
                 type="button"
+                disabled={pending}
                 onClick={() => showForm(mode === "signup" ? "signin" : "signup")}
               >
                 {mode === "signup" ? "Sign in" : "Create an account"}
