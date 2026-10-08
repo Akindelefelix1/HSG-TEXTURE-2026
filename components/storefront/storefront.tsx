@@ -80,7 +80,26 @@ function CategoryRail() { const loop=[...storyCategories,...storyCategories]; re
 function HomeView({add}:{add:()=>void}) { const {products}=useContext(CatalogContext);const featuredCategories=["Seven Star","German Wool","Irish","Cashmere","Aso Oke","Seven Nine Eight","Nine Star","Jokonso"]; return <main><section className="hero"><div className="hero-copy"><p className="eyebrow">The new textile edit</p><h1>Find the fabric.<br/><em>Make it yours.</em></h1><p>Exceptional textures for defining moments—from everyday silhouettes to once-in-a-lifetime celebrations.</p><div className="hero-buttons"><Link href="/products" className="primary">Shop new arrivals</Link><Link href="/category" className="text-link">Explore collections <ChevronRight size={16}/></Link></div><div className="hero-trust"><span><Truck size={17}/> Nationwide delivery</span><span><Sparkles size={17}/> Curated quality</span></div></div><div className="hero-image" role="img" aria-label="Blue, gold, ivory and patterned fabrics"><span className="image-note"><i/> Texture you can almost feel</span></div></section><section className="category-section"><SectionTitle eyebrow="Shop by mood" title="A texture for every story" href="/category" link="View every collection"/><CategoryRail/></section><div className="home-category-sections">{featuredCategories.map((category,index)=><section className="products-section home-category-section" key={category}><SectionTitle eyebrow={index===0?"Featured collections":"Explore the collection"} title={category} href="/category" link={`View all ${category}`}/><div className="product-grid">{products.filter(product=>product.category===category).map(product=><ProductCard key={product.name} product={product} add={add}/>)}</div></section>)}</div><section className="studio-story"><div><p className="eyebrow">The HSG standard</p><h2>Chosen by hand.<br/>Made to be remembered.</h2></div><div><p>We look beyond colour. Every fabric in our edit is selected for its handle, fall, finish and the way it transforms in the hands of a maker.</p><Link href="/about" className="text-link light">Meet HSG Texture <ChevronRight size={16}/></Link></div></section><section className="service-grid">{[["01","Swatch-ready","See and feel a fabric before committing to the required quantity."],["02","Measured with care","Every cut is checked twice and packed with intention."],["03","Human guidance","Tell us what you’re making; we’ll help you choose well."]].map(x=><div key={x[0]}><span>{x[0]}</span><h3>{x[1]}</h3><p>{x[2]}</p></div>)}</section></main>; }
 function SectionTitle({eyebrow,title,href,link}:{eyebrow:string;title:string;href:string;link:string}) { return <div className="section-heading"><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2></div><Link href={href}>{link} <ChevronRight size={16}/></Link></div>; }
 function PriceFilter({minPrice,maxPrice,onMinPriceChange,onMaxPriceChange}:{minPrice:string;maxPrice:string;onMinPriceChange:(value:string)=>void;onMaxPriceChange:(value:string)=>void}) {
-  return <fieldset className="price-filter"><legend>Filter by price</legend><label>Minimum price (₦)<input type="number" min="0" step="500" inputMode="numeric" value={minPrice} onChange={event=>onMinPriceChange(event.target.value)} placeholder="No minimum"/></label><label>Maximum price (₦)<input type="number" min="0" step="500" inputMode="numeric" value={maxPrice} onChange={event=>onMaxPriceChange(event.target.value)} placeholder="No maximum"/></label></fieldset>;
+  const rangeMax=100000;
+  const [draftMin,setDraftMin]=useState(Number(minPrice)||0);
+  const [draftMax,setDraftMax]=useState(Number(maxPrice)||rangeMax);
+  useEffect(()=>{setDraftMin(Number(minPrice)||0);setDraftMax(Number(maxPrice)||rangeMax)},[minPrice,maxPrice]);
+  const minPercent=draftMin/rangeMax*100;
+  const maxPercent=draftMax/rangeMax*100;
+  const apply=()=>{onMinPriceChange(draftMin===0?"":String(draftMin));onMaxPriceChange(draftMax===rangeMax?"":String(draftMax))};
+  return <fieldset className="price-filter" style={{"--range-start":`${minPercent}%`,"--range-end":`${maxPercent}%`} as React.CSSProperties}>
+    <legend>Price range</legend>
+    <div className="price-values">
+      <label><span>Min</span><span className="price-input"><b>₦</b><input aria-label="Minimum price" type="number" min="0" max={draftMax-500} step="500" inputMode="numeric" value={draftMin} onChange={event=>setDraftMin(Math.min(Number(event.target.value)||0,draftMax-500))}/></span></label>
+      <i aria-hidden="true"/>
+      <label><span>Max</span><span className="price-input"><b>₦</b><input aria-label="Maximum price" type="number" min={draftMin+500} max={rangeMax} step="500" inputMode="numeric" value={draftMax} onChange={event=>setDraftMax(Math.max(Number(event.target.value)||rangeMax,draftMin+500))}/></span></label>
+    </div>
+    <div className="price-range-track">
+      <input aria-label="Minimum price slider" type="range" min="0" max={rangeMax} step="500" value={draftMin} onChange={event=>setDraftMin(Math.min(Number(event.target.value),draftMax-500))}/>
+      <input aria-label="Maximum price slider" type="range" min="0" max={rangeMax} step="500" value={draftMax} onChange={event=>setDraftMax(Math.max(Number(event.target.value),draftMin+500))}/>
+    </div>
+    <button type="button" onClick={apply}>Apply</button>
+  </fieldset>;
 }
 function matchesPriceRange(price:number,minPrice:string,maxPrice:string) {
   const minimum=minPrice===""?undefined:Number(minPrice);
