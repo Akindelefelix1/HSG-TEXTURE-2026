@@ -50,18 +50,19 @@ export const defaultAdminCategories:Category[]=catalogCategories.map<Category>((
 export function migrateAdminCatalog(){
   if(typeof window==="undefined")return;
   const version=window.localStorage.getItem(ADMIN_CATALOG_VERSION_KEY);
-  if(version==="2")return;
+  if(version==="3")return;
   let savedProducts:Product[]=[];
   let savedCategories:Category[]=[];
   try{savedProducts=JSON.parse(window.localStorage.getItem(ADMIN_PRODUCTS_KEY)||"[]") as Product[]}catch{/* Use defaults below. */}
   try{savedCategories=JSON.parse(window.localStorage.getItem(ADMIN_CATEGORIES_KEY)||"[]") as Category[]}catch{/* Use defaults below. */}
-  const migratedProducts:Product[]=(savedProducts.length?savedProducts:defaultAdminProducts.filter(product=>product.section==="fabric")).map(product=>({...product,section:product.section??"fabric"}));
-  const migratedCategories:Category[]=(savedCategories.length?savedCategories:defaultAdminCategories.filter(category=>category.section==="fabric")).map(category=>({...category,section:category.section??"fabric"}));
+  const migratedProducts:Product[]=(savedProducts.length?savedProducts:defaultAdminProducts.filter(product=>product.section==="fabric")).map(product=>({...product,category:product.category==="Aso-Oke"?"Aso Oke":product.category,section:product.section??"fabric"}));
+  const migratedCategories:Category[]=(savedCategories.length?savedCategories:defaultAdminCategories.filter(category=>category.section==="fabric")).map(category=>({...category,name:category.name==="Aso-Oke"?"Aso Oke":category.name,section:category.section??"fabric"}));
   if(!migratedProducts.some(product=>product.section==="accessories"))migratedProducts.push(...defaultAdminProducts.filter(product=>product.section==="accessories"));
   if(!migratedCategories.some(category=>category.section==="accessories"))migratedCategories.push(...defaultAdminCategories.filter(category=>category.section==="accessories"));
+  defaultAdminCategories.filter(category=>category.section==="fabric").forEach(category=>{if(!migratedCategories.some(item=>(item.section??"fabric")==="fabric"&&item.name.toLowerCase()===category.name.toLowerCase()))migratedCategories.push({...category,id:`category-added-${category.name.toLowerCase().replace(/[^a-z0-9]+/g,"-")}`})});
   window.localStorage.setItem(ADMIN_PRODUCTS_KEY,JSON.stringify(migratedProducts));
   window.localStorage.setItem(ADMIN_CATEGORIES_KEY,JSON.stringify(migratedCategories));
-  window.localStorage.setItem(ADMIN_CATALOG_VERSION_KEY,"2");
+  window.localStorage.setItem(ADMIN_CATALOG_VERSION_KEY,"3");
 }
 
 export function makeAdminId(prefix:string){
