@@ -6,7 +6,7 @@ import {
   BetterAuthVanillaAdapter,
   type BetterAuthVanillaAdapterInstance,
 } from "@neondatabase/neon-js/auth/vanilla/adapters";
-import { LogOut, UserRound, X } from "lucide-react";
+import { LogOut, X } from "lucide-react";
 
 type AccountMode = "signup" | "signin";
 type ApiUser = { email: string; name?: string };
@@ -129,7 +129,7 @@ export function AccountProfileButton() {
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        <UserRound size={20} />
+        Profile
       </button>
       {open && (
         <section className="header-profile-menu" aria-label="Your profile">
