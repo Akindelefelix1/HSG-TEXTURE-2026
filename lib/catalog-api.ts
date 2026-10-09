@@ -33,6 +33,17 @@ type ApiProduct = {
   active: boolean;
   category: ApiCategory;
 };
+const normalizeMediaUrl = (url: string, key: string) => {
+  try {
+    const parsed = new URL(url);
+    const bucketEnd = parsed.pathname.indexOf("/", 1);
+    if (bucketEnd < 0) return url;
+    parsed.pathname = `${parsed.pathname.slice(0, bucketEnd + 1)}${key.split("/").map(encodeURIComponent).join("/")}`;
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+};
 const toCategory = (category: ApiCategory): Category => ({
   id: category.id,
   name: category.name,
@@ -50,7 +61,10 @@ const toProduct = (product: ApiProduct): Product => ({
   color: product.color,
   texture: product.texture,
   description: product.description || undefined,
-  image: product.imageUrl || undefined,
+  image:
+    product.gallery?.[0]?.key && product.imageUrl
+      ? normalizeMediaUrl(product.imageUrl, product.gallery[0].key)
+      : product.imageUrl || undefined,
   media: (product.gallery ?? [])
     .filter((media): media is ApiProductMedia =>
       Boolean(media && typeof media === "object" && media.url),
@@ -58,7 +72,7 @@ const toProduct = (product: ApiProduct): Product => ({
     .map((media) => ({
       id: media.key,
       key: media.key,
-      url: media.url,
+      url: normalizeMediaUrl(media.url, media.key),
       name: media.name,
       type: media.type,
     })),
@@ -322,7 +336,8 @@ export async function uploadAdminProductMedia(
       headers: { Authorization: `Bearer ${token}` },
     }),
   );
-  const { url: publicUrl } = (await read.json()) as { url: string };
+  const { url: returnedUrl } = (await read.json()) as { url: string };
+  const publicUrl = normalizeMediaUrl(returnedUrl, key);
   return {
     id: key,
     key,
