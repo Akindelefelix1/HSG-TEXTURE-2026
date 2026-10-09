@@ -6,7 +6,7 @@ import {
   BetterAuthVanillaAdapter,
   type BetterAuthVanillaAdapterInstance,
 } from "@neondatabase/neon-js/auth/vanilla/adapters";
-import { X } from "lucide-react";
+import { LogOut, UserRound, X } from "lucide-react";
 
 type AccountMode = "signup" | "signin";
 type ApiUser = { email: string; name?: string };
@@ -17,6 +17,7 @@ type AuthClient = ReturnType<
 const DEFAULT_API_URL = "https://hsg-be.onrender.com";
 
 let authClient: AuthClient | undefined;
+const ACCOUNT_CHANGED_EVENT = "hsg-account-changed";
 
 function getAuthServices() {
   const authUrl = process.env.NEXT_PUBLIC_NEON_AUTH_URL?.trim();
@@ -62,7 +63,98 @@ function getAuthServices() {
   return { auth: authClient, apiUrl: apiUrl.replace(/\/+$/, "") };
 }
 
+async function readCurrentUser(): Promise<ApiUser | null> {
+  try {
+    const { auth, apiUrl } = getAuthServices();
+    const { data, error } = await auth.token();
+    if (error || !data?.token) return null;
+    const response = await fetch(`${apiUrl}/api/v1/auth/me`, {
+      headers: { Authorization: `Bearer ${data.token}` },
+    });
+    return response.ok ? (await response.json()) as ApiUser : null;
+  } catch {
+    return null;
+  }
+}
+
+function announceAccountChange(user: ApiUser | null) {
+  window.dispatchEvent(new CustomEvent<ApiUser | null>(ACCOUNT_CHANGED_EVENT, { detail: user }));
+}
+
+function useCustomerAccount() {
+  const [user, setUser] = useState<ApiUser | null>(null);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    void readCurrentUser().then((current) => {
+      if (mounted) {
+        setUser(current);
+        setChecking(false);
+      }
+    });
+    const sync = (event: Event) => {
+      setUser((event as CustomEvent<ApiUser | null>).detail ?? null);
+      setChecking(false);
+    };
+    window.addEventListener(ACCOUNT_CHANGED_EVENT, sync);
+    return () => {
+      mounted = false;
+      window.removeEventListener(ACCOUNT_CHANGED_EVENT, sync);
+    };
+  }, []);
+
+  const logout = async () => {
+    const { auth } = getAuthServices();
+    const result = await auth.signOut();
+    if (result.error) throw new Error(result.error.message ?? "Could not sign out.");
+    announceAccountChange(null);
+  };
+
+  return { user, checking, logout };
+}
+
+export function AccountProfileButton() {
+  const { user, checking, logout } = useCustomerAccount();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState("");
+  if (checking || !user) return null;
+
+  return (
+    <div className="header-profile">
+      <button
+        type="button"
+        className="header-profile-button"
+        aria-label="View your profile"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <UserRound size={20} />
+      </button>
+      {open && (
+        <section className="header-profile-menu" aria-label="Your profile">
+          <div className="header-profile-avatar" aria-hidden="true">
+            {(user.name?.trim()[0] ?? user.email[0] ?? "U").toUpperCase()}
+          </div>
+          <div className="header-profile-details">
+            <b>{user.name?.trim() || "HSG Texture customer"}</b>
+            <span>{user.email}</span>
+          </div>
+          {error && <small role="alert">{error}</small>}
+          <button type="button" className="header-profile-logout" onClick={async () => {
+            setError("");
+            try { await logout(); setOpen(false); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not sign out."); }
+          }}>
+            <LogOut size={15} /> Log out
+          </button>
+        </section>
+      )}
+    </div>
+  );
+}
+
 export function AccountAccess() {
+  const { user, checking } = useCustomerAccount();
   const [mode, setMode] = useState<AccountMode>("signup");
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -155,6 +247,7 @@ export function AccountAccess() {
         throw new Error(`HSG account verification failed (HTTP ${response.status}).`);
       }
       const user = (await response.json()) as ApiUser;
+      announceAccountChange(user);
       if (!accountCreated) {
         setOpen(false);
         setToastMessage(
@@ -187,8 +280,17 @@ export function AccountAccess() {
   return (
     <>
       <div className="footer-account-actions">
-        <button type="button" onClick={() => showForm("signup")}>Create an account</button>
-        <button type="button" onClick={() => showForm("signin")}>Sign in</button>
+        {!checking && user ? (
+          <div className="footer-account-signed-in">
+            <span>Already logged in</span>
+            <strong>{user.email}</strong>
+          </div>
+        ) : (
+          <>
+            <button type="button" onClick={() => showForm("signup")}>Create an account</button>
+            <button type="button" onClick={() => showForm("signin")}>Sign in</button>
+          </>
+        )}
       </div>
       {toastMessage && (
         <div className="account-success-toast" role="status" aria-live="polite">

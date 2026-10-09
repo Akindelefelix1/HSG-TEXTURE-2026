@@ -8,7 +8,9 @@ export const SITE_SETTINGS_KEY="hsg-site-settings";
 export const STORY_SETTINGS_KEY="hsg-story-settings";
 
 export type SiteSettings={announcement:string;heroEyebrow:string;heroTitle:string;heroAccent:string;heroDescription:string;primaryLabel:string;primaryHref:string;secondaryLabel:string;secondaryHref:string;trustOne:string;trustTwo:string;imageNote:string;heroImageId?:string};
-export const defaultSiteSettings:SiteSettings={announcement:"New season edit: complimentary Lagos delivery over ₦75,000",heroEyebrow:"The new textile edit",heroTitle:"Find the fabric.",heroAccent:"Make it yours.",heroDescription:"Exceptional textures for defining moments—from everyday silhouettes to once-in-a-lifetime celebrations.",primaryLabel:"Shop new arrivals",primaryHref:"/products?filter=new",secondaryLabel:"Explore collections",secondaryHref:"/category",trustOne:"Nationwide delivery",trustTwo:"Curated quality",imageNote:"Texture you can almost feel"};
+export const defaultSiteSettings:SiteSettings={announcement:"Same-day or next-day delivery is available, depending on when your order is placed and the delivery location.",heroEyebrow:"The new textile edit",heroTitle:"Find the fabric.",heroAccent:"Make it yours.",heroDescription:"Exceptional textures for defining moments—from everyday silhouettes to once-in-a-lifetime celebrations.",primaryLabel:"Shop new arrivals",primaryHref:"/products?filter=new",secondaryLabel:"Explore collections",secondaryHref:"/category",trustOne:"Nationwide delivery",trustTwo:"Curated quality",imageNote:"Texture you can almost feel"};
+const previousDefaultAnnouncement="New season edit: complimentary Lagos delivery over ₦75,000";
+export const migrateSiteSettings=(settings:SiteSettings):SiteSettings=>settings.announcement===previousDefaultAnnouncement?{...settings,announcement:defaultSiteSettings.announcement}:settings;
 
 export type StoryValue={id:string;number:string;title:string;description:string};
 export type CustomerFeedback={id:string;customerName:string;quote:string;mediaId?:string;mediaName?:string;mediaType?:"image"|"video";active:boolean};

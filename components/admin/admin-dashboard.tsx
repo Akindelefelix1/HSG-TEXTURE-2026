@@ -7,7 +7,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Check, ChevronRight, Edit3, Eye, EyeOff, FolderPlus, ImagePlus, LayoutDashboard, LogOut, MessageSquareQuote, Monitor, Package, Plus, Search, Settings, Trash2, X } from "lucide-react";
 import { createAuthClient } from "@neondatabase/neon-js/auth";
 import { BetterAuthVanillaAdapter, type BetterAuthVanillaAdapterInstance } from "@neondatabase/neon-js/auth/vanilla/adapters";
-import { ADMIN_CATEGORIES_KEY, ADMIN_PRODUCTS_KEY, SITE_SETTINGS_KEY, STORY_SETTINGS_KEY, defaultAdminCategories, defaultAdminProducts, defaultSiteSettings, defaultStorySettings, makeAdminId, migrateAdminCatalog, type CustomerFeedback, type SiteSettings, type StorySettings } from "@/lib/catalog-admin";
+import { ADMIN_CATEGORIES_KEY, ADMIN_PRODUCTS_KEY, SITE_SETTINGS_KEY, STORY_SETTINGS_KEY, defaultAdminCategories, defaultAdminProducts, defaultSiteSettings, defaultStorySettings, makeAdminId, migrateAdminCatalog, migrateSiteSettings, type CustomerFeedback, type SiteSettings, type StorySettings } from "@/lib/catalog-admin";
 import { formatNaira } from "@/lib/storefront";
 import type { Category, Product, ProductMedia } from "@/types/storefront";
 import { AppDialog } from "@/components/ui/app-dialog";
@@ -84,7 +84,7 @@ export function AdminDashboard(){
     migrateAdminCatalog();
     setProducts(readLocal(ADMIN_PRODUCTS_KEY,defaultAdminProducts));
     setCategories(readLocal(ADMIN_CATEGORIES_KEY,defaultAdminCategories));
-    const settings=readLocal(SITE_SETTINGS_KEY,defaultSiteSettings);setSiteSettings(settings);setStorySettings(readLocal(STORY_SETTINGS_KEY,defaultStorySettings));if(settings.heroImageId)void getProductMedia(settings.heroImageId).then(blob=>{if(blob)setHeroPreview(URL.createObjectURL(blob))});
+    const settings=migrateSiteSettings(readLocal(SITE_SETTINGS_KEY,defaultSiteSettings));window.localStorage.setItem(SITE_SETTINGS_KEY,JSON.stringify(settings));setSiteSettings(settings);setStorySettings(readLocal(STORY_SETTINGS_KEY,defaultStorySettings));if(settings.heroImageId)void getProductMedia(settings.heroImageId).then(blob=>{if(blob)setHeroPreview(URL.createObjectURL(blob))});
     let mounted=true;
     const restoreAdminSession=async()=>{
       try{
