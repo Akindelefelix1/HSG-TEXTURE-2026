@@ -6,7 +6,9 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
+  ChevronDown,
   ChevronRight,
+  ChevronUp,
   Edit3,
   Eye,
   EyeOff,
@@ -204,6 +206,7 @@ export function AdminDashboard() {
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [authPending, setAuthPending] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [authError, setAuthError] = useState("");
   const [activeAction, setActiveAction] = useState("");
   const [actionError, setActionError] = useState("");
@@ -238,7 +241,10 @@ export function AdminDashboard() {
       readLocal(SITE_SETTINGS_KEY, defaultSiteSettings),
     );
     window.localStorage.setItem(SITE_SETTINGS_KEY, JSON.stringify(settings));
-    queueMicrotask(()=>{setSiteSettings(settings);setStorySettings(readLocal(STORY_SETTINGS_KEY,defaultStorySettings))});
+    queueMicrotask(() => {
+      setSiteSettings(settings);
+      setStorySettings(readLocal(STORY_SETTINGS_KEY, defaultStorySettings));
+    });
     if (settings.heroImageId)
       void getProductMedia(settings.heroImageId).then((blob) => {
         if (blob) setHeroPreview(URL.createObjectURL(blob));
@@ -721,6 +727,32 @@ export function AdminDashboard() {
       }
     });
   };
+  const moveCategory = (index: number, direction: -1 | 1) => {
+    const target = index + direction;
+    if (target < 0 || target >= sectionCategories.length) return;
+    const reordered = [...sectionCategories];
+    [reordered[index], reordered[target]] = [
+      reordered[target],
+      reordered[index],
+    ];
+    void runAdminAction("Reordering categories", async () => {
+      const { apiUrl, token } = await getAdminRequestContext();
+      const updated = await Promise.all(
+        reordered.map((category, sortOrder) =>
+          category.id
+            ? updateAdminCategory(apiUrl, token, category.id, { sortOrder })
+            : Promise.resolve({ ...category, sortOrder }),
+        ),
+      );
+      const updates = new Map(
+        updated.map((category) => [category.id, category]),
+      );
+      publishCategories(
+        categories.map((category) => updates.get(category.id) ?? category),
+      );
+      flash("Category order updated.");
+    });
+  };
   const removeCategory = (category: Category) => {
     if (
       products.some(
@@ -827,15 +859,26 @@ export function AdminDashboard() {
             </label>
             <label>
               Password
-              <input
-                name="password"
-                type="password"
-                required
-                minLength={8}
-                autoComplete="current-password"
-                placeholder="Enter your password"
-                disabled={authPending}
-              />
+              <span className="password-field">
+                <input
+                  name="password"
+                  type={showPassword ? "text" : "password"}
+                  required
+                  minLength={8}
+                  autoComplete="current-password"
+                  placeholder="Enter your password"
+                  disabled={authPending}
+                />
+                <button
+                  type="button"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-pressed={showPassword}
+                  onClick={() => setShowPassword((value) => !value)}
+                  disabled={authPending}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </span>
             </label>
             {authError && (
               <div className="admin-auth-error" role="alert">
@@ -1130,7 +1173,7 @@ export function AdminDashboard() {
                   </div>
                 </div>
                 <div className="admin-category-list">
-                  {sectionCategories.map((category) => (
+                  {sectionCategories.map((category, index) => (
                     <article key={category.id}>
                       <div>
                         <span
@@ -1146,6 +1189,27 @@ export function AdminDashboard() {
                         </div>
                       </div>
                       <div>
+                        <span className="admin-category-order">
+                          <button
+                            type="button"
+                            onClick={() => moveCategory(index, -1)}
+                            disabled={Boolean(activeAction) || index === 0}
+                            aria-label={`Move ${category.name} up`}
+                          >
+                            <ChevronUp size={16} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveCategory(index, 1)}
+                            disabled={
+                              Boolean(activeAction) ||
+                              index === sectionCategories.length - 1
+                            }
+                            aria-label={`Move ${category.name} down`}
+                          >
+                            <ChevronDown size={16} />
+                          </button>
+                        </span>
                         <button
                           onClick={() => toggleCategory(category.id)}
                           disabled={Boolean(activeAction)}

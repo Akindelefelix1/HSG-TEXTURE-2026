@@ -33,6 +33,7 @@ export type ProductMedia = {
 export type Category = {
   id?: string;
   section?: "fabric" | "accessories";
+  sortOrder?: number;
   name: string;
   note: string;
   active?: boolean;

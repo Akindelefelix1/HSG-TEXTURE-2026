@@ -6,7 +6,7 @@ import {
   BetterAuthVanillaAdapter,
   type BetterAuthVanillaAdapterInstance,
 } from "@neondatabase/neon-js/auth/vanilla/adapters";
-import { LogOut, X } from "lucide-react";
+import { Eye, EyeOff, Loader2, LogOut, X } from "lucide-react";
 
 type AccountMode = "signup" | "signin";
 type ApiUser = { email: string; name?: string };
@@ -21,8 +21,7 @@ const ACCOUNT_CHANGED_EVENT = "hsg-account-changed";
 
 function getAuthServices() {
   const authUrl = process.env.NEXT_PUBLIC_NEON_AUTH_URL?.trim();
-  const apiUrl =
-    process.env.NEXT_PUBLIC_HSG_API_URL?.trim() || DEFAULT_API_URL;
+  const apiUrl = process.env.NEXT_PUBLIC_HSG_API_URL?.trim() || DEFAULT_API_URL;
   if (!authUrl) {
     throw new Error(
       "Account access is not configured. Set NEXT_PUBLIC_NEON_AUTH_URL before building the storefront.",
@@ -42,7 +41,9 @@ function getAuthServices() {
   const isLocalhost = (url: URL) =>
     ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
   if (parsedAuthUrl.protocol !== "https:" && !isLocalhost(parsedAuthUrl)) {
-    throw new Error("NEXT_PUBLIC_NEON_AUTH_URL must use HTTPS outside localhost.");
+    throw new Error(
+      "NEXT_PUBLIC_NEON_AUTH_URL must use HTTPS outside localhost.",
+    );
   }
   if (
     (parsedApiUrl.protocol !== "https:" && !isLocalhost(parsedApiUrl)) ||
@@ -71,14 +72,16 @@ async function readCurrentUser(): Promise<ApiUser | null> {
     const response = await fetch(`${apiUrl}/api/v1/auth/me`, {
       headers: { Authorization: `Bearer ${data.token}` },
     });
-    return response.ok ? (await response.json()) as ApiUser : null;
+    return response.ok ? ((await response.json()) as ApiUser) : null;
   } catch {
     return null;
   }
 }
 
 function announceAccountChange(user: ApiUser | null) {
-  window.dispatchEvent(new CustomEvent<ApiUser | null>(ACCOUNT_CHANGED_EVENT, { detail: user }));
+  window.dispatchEvent(
+    new CustomEvent<ApiUser | null>(ACCOUNT_CHANGED_EVENT, { detail: user }),
+  );
 }
 
 function useCustomerAccount() {
@@ -107,7 +110,8 @@ function useCustomerAccount() {
   const logout = async () => {
     const { auth } = getAuthServices();
     const result = await auth.signOut();
-    if (result.error) throw new Error(result.error.message ?? "Could not sign out.");
+    if (result.error)
+      throw new Error(result.error.message ?? "Could not sign out.");
     announceAccountChange(null);
   };
 
@@ -118,6 +122,7 @@ export function AccountProfileButton() {
   const { user, checking, logout } = useCustomerAccount();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
+  const [loggingOut, setLoggingOut] = useState(false);
   if (checking || !user) return null;
 
   return (
@@ -141,11 +146,33 @@ export function AccountProfileButton() {
             <span>{user.email}</span>
           </div>
           {error && <small role="alert">{error}</small>}
-          <button type="button" className="header-profile-logout" onClick={async () => {
-            setError("");
-            try { await logout(); setOpen(false); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not sign out."); }
-          }}>
-            <LogOut size={15} /> Log out
+          <button
+            type="button"
+            className="header-profile-logout"
+            disabled={loggingOut}
+            onClick={async () => {
+              setError("");
+              setLoggingOut(true);
+              try {
+                await logout();
+                setOpen(false);
+              } catch (cause) {
+                setError(
+                  cause instanceof Error
+                    ? cause.message
+                    : "Could not sign out.",
+                );
+              } finally {
+                setLoggingOut(false);
+              }
+            }}
+          >
+            {loggingOut ? (
+              <Loader2 size={15} className="admin-activity-spinner" />
+            ) : (
+              <LogOut size={15} />
+            )}{" "}
+            {loggingOut ? "Logging out…" : "Log out"}
           </button>
         </section>
       )}
@@ -164,6 +191,7 @@ export function AccountAccess() {
   const [toastMessage, setToastMessage] = useState("");
   const [email, setEmail] = useState("");
   const [existingAccount, setExistingAccount] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (!toastMessage) return;
@@ -192,7 +220,9 @@ export function AccountAccess() {
     try {
       const { auth, apiUrl } = getAuthServices();
       const formData = new FormData(event.currentTarget);
-      const email = String(formData.get("email") ?? "").trim().toLowerCase();
+      const email = String(formData.get("email") ?? "")
+        .trim()
+        .toLowerCase();
       const password = String(formData.get("password") ?? "");
       const result =
         mode === "signup"
@@ -205,7 +235,8 @@ export function AccountAccess() {
 
       if (result.error) {
         const errorMessage =
-          result.error.message ?? "Neon could not process your account request.";
+          result.error.message ??
+          "Neon could not process your account request.";
         const accountExists =
           mode === "signup" && /already exists/i.test(errorMessage);
         setExistingAccount(accountExists);
@@ -222,7 +253,9 @@ export function AccountAccess() {
       if (tokenError) throw new Error(tokenError.message);
       if (!tokenData?.token) {
         setMessageTitle(
-          accountCreated ? "Account created successfully" : "Sign-in needs attention",
+          accountCreated
+            ? "Account created successfully"
+            : "Sign-in needs attention",
         );
         setMessage(
           accountCreated
@@ -244,7 +277,9 @@ export function AccountAccess() {
         );
       }
       if (!response.ok) {
-        throw new Error(`HSG account verification failed (HTTP ${response.status}).`);
+        throw new Error(
+          `HSG account verification failed (HTTP ${response.status}).`,
+        );
       }
       const user = (await response.json()) as ApiUser;
       announceAccountChange(user);
@@ -255,15 +290,15 @@ export function AccountAccess() {
         );
         return;
       }
-      setMessageTitle(
-        "Account created successfully",
-      );
+      setMessageTitle("Account created successfully");
       setMessage(
         `Your HSG Texture account was created successfully${user.name ? `, ${user.name}` : ""}. Welcome!`,
       );
     } catch (cause) {
       const details =
-        cause instanceof Error ? cause.message : "An unexpected error occurred.";
+        cause instanceof Error
+          ? cause.message
+          : "An unexpected error occurred.";
       if (accountCreated) {
         setMessageTitle("Account created successfully");
         setMessage(
@@ -287,8 +322,12 @@ export function AccountAccess() {
           </div>
         ) : (
           <>
-            <button type="button" onClick={() => showForm("signup")}>Create an account</button>
-            <button type="button" onClick={() => showForm("signin")}>Sign in</button>
+            <button type="button" onClick={() => showForm("signup")}>
+              Create an account
+            </button>
+            <button type="button" onClick={() => showForm("signin")}>
+              Sign in
+            </button>
           </>
         )}
       </div>
@@ -366,16 +405,35 @@ export function AccountAccess() {
               </label>
               <label>
                 Password
-                <input
-                  name="password"
-                  type="password"
-                  autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                  placeholder={mode === "signup" ? "Create a password" : "Enter your password"}
-                  required
-                  minLength={8}
-                  maxLength={128}
-                  disabled={pending}
-                />
+                <span className="password-field">
+                  <input
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete={
+                      mode === "signup" ? "new-password" : "current-password"
+                    }
+                    placeholder={
+                      mode === "signup"
+                        ? "Create a password"
+                        : "Enter your password"
+                    }
+                    required
+                    minLength={8}
+                    maxLength={128}
+                    disabled={pending}
+                  />
+                  <button
+                    type="button"
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((value) => !value)}
+                    disabled={pending}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </span>
               </label>
               {error && (
                 <div className="account-form-message error" role="alert">
@@ -392,12 +450,20 @@ export function AccountAccess() {
                 </div>
               )}
               {message && (
-                <div className="account-form-message" role="status" aria-live="polite">
+                <div
+                  className="account-form-message"
+                  role="status"
+                  aria-live="polite"
+                >
                   <b>{messageTitle}</b>
                   <p>{message}</p>
                 </div>
               )}
-              <button className="account-submit" type="submit" disabled={pending}>
+              <button
+                className="account-submit"
+                type="submit"
+                disabled={pending}
+              >
                 {pending
                   ? "Please wait..."
                   : mode === "signup"
@@ -406,11 +472,15 @@ export function AccountAccess() {
               </button>
             </form>
             <p className="account-mode-switch">
-              {mode === "signup" ? "Already have an account?" : "New to HSG Texture?"}{" "}
+              {mode === "signup"
+                ? "Already have an account?"
+                : "New to HSG Texture?"}{" "}
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => showForm(mode === "signup" ? "signin" : "signup")}
+                onClick={() =>
+                  showForm(mode === "signup" ? "signin" : "signup")
+                }
               >
                 {mode === "signup" ? "Sign in" : "Create an account"}
               </button>

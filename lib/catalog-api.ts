@@ -10,6 +10,7 @@ type ApiCategory = {
   slug: string;
   description: string;
   section: "fabric" | "accessories";
+  sortOrder: number;
   active: boolean;
 };
 type ApiProductMedia = {
@@ -37,6 +38,7 @@ const toCategory = (category: ApiCategory): Category => ({
   name: category.name,
   note: category.description,
   section: category.section,
+  sortOrder: category.sortOrder,
   active: category.active,
 });
 const toProduct = (product: ApiProduct): Product => ({
@@ -126,7 +128,7 @@ export async function updateAdminCategory(
   baseUrl: string,
   token: string,
   id: string,
-  patch: { active: boolean },
+  patch: { active?: boolean; sortOrder?: number },
 ) {
   const response = await ensureOk(
     await fetch(`${baseUrl}/api/v1/admin/catalog/categories/${id}`, {
