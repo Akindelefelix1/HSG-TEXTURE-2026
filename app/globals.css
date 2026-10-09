@@ -3205,7 +3205,21 @@ footer {
 }
 .admin-category-list article > div:last-child {
   display: flex;
+  align-items: center;
+  gap: 5px;
   white-space: nowrap;
+}
+.admin-category-list article > div:last-child .admin-category-order {
+  display: flex;
+}
+.admin-category-list article > div:last-child button.admin-category-edit {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 10px;
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 700;
 }
 .admin-category-list p {
   font-size: 0.72rem;

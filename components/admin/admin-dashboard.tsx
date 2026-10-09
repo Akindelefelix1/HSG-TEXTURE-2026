@@ -235,6 +235,8 @@ export function AdminDashboard() {
   const [mediaError, setMediaError] = useState("");
   const [categoryName, setCategoryName] = useState("");
   const [categoryNote, setCategoryNote] = useState("");
+  const [categoryDraftSection, setCategoryDraftSection] =
+    useState<CatalogSection>("fabric");
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(
     null,
   );
@@ -707,11 +709,15 @@ export function AdminDashboard() {
       editingCategoryId ? "Saving category" : "Creating category",
       async () => {
       const name = categoryName.trim();
+      const draftSection = editingCategoryId
+        ? categoryDraftSection
+        : catalogSection;
       if (
         !name ||
-        sectionCategories.some(
+        categories.some(
           (category) =>
             category.id !== editingCategoryId &&
+            (category.section ?? "fabric") === draftSection &&
             category.name.toLowerCase() === name.toLowerCase(),
         )
       )
@@ -727,26 +733,55 @@ export function AdminDashboard() {
             apiUrl,
             token,
             editingCategoryId,
-            { name, description: categoryNote.trim() },
+            {
+              name,
+              description: categoryNote.trim(),
+              section: categoryDraftSection,
+              ...(original.section !== categoryDraftSection
+                ? {
+                    sortOrder:
+                      Math.max(
+                        -1,
+                        ...categories
+                          .filter(
+                            (category) =>
+                              category.id !== original.id &&
+                              (category.section ?? "fabric") ===
+                                categoryDraftSection,
+                          )
+                          .map((category) => category.sortOrder ?? 0),
+                      ) + 1,
+                  }
+                : {}),
+            },
           );
           publishCategories(
             categories.map((category) =>
               category.id === updated.id ? updated : category,
             ),
           );
-          if (original.name !== updated.name)
+          if (
+            original.name !== updated.name ||
+            original.section !== updated.section
+          )
             publishProducts(
               products.map((product) =>
                 product.category === original.name &&
                 (product.section ?? "fabric") ===
                   (original.section ?? "fabric")
-                  ? { ...product, category: updated.name }
+                  ? {
+                      ...product,
+                      category: updated.name,
+                      section: updated.section,
+                    }
                   : product,
               ),
             );
           setEditingCategoryId(null);
           setCategoryName("");
           setCategoryNote("");
+          setCatalogSection(updated.section ?? "fabric");
+          setCategoriesPage(1);
           flash("Category updated.");
           return;
         }
@@ -758,12 +793,15 @@ export function AdminDashboard() {
         publishCategories([...categories, created]);
         setCategoryName("");
         setCategoryNote("");
+        setCategoryDraftSection(catalogSection);
         flash(
           `${catalogSection === "fabric" ? "Fabric" : "Accessory"} category created.`,
         );
       } catch (cause) {
         setDialog({
-          title: "Category was not created",
+          title: editingCategoryId
+            ? "Category was not updated"
+            : "Category was not created",
           description:
             cause instanceof Error
               ? cause.message
@@ -781,11 +819,13 @@ export function AdminDashboard() {
     setEditingCategoryId(category.id);
     setCategoryName(category.name);
     setCategoryNote(category.note ?? "");
+    setCategoryDraftSection(category.section ?? "fabric");
   };
   const cancelCategoryEdit = () => {
     setEditingCategoryId(null);
     setCategoryName("");
     setCategoryNote("");
+    setCategoryDraftSection(catalogSection);
   };
   const toggleCategory = (id: string | undefined) => {
     void runAdminAction("Updating category", async () => {
@@ -1255,10 +1295,28 @@ export function AdminDashboard() {
                 onSubmit={addCategory}
               >
                 <p className="eyebrow">
-                  New {catalogSection === "fabric" ? "fabric" : "accessory"}{" "}
-                  collection
+                  {editingCategoryId
+                    ? "Update collection details"
+                    : `New ${catalogSection === "fabric" ? "fabric" : "accessory"} collection`}
                 </p>
-                <h3>Create category</h3>
+                <h3>{editingCategoryId ? "Edit category" : "Create category"}</h3>
+                {editingCategoryId && (
+                  <label>
+                    Category section
+                    <select
+                      value={categoryDraftSection}
+                      onChange={(event) =>
+                        setCategoryDraftSection(
+                          event.target.value as CatalogSection,
+                        )
+                      }
+                      disabled={Boolean(activeAction)}
+                    >
+                      <option value="fabric">Fabric</option>
+                      <option value="accessories">Accessories</option>
+                    </select>
+                  </label>
+                )}
                 <label>
                   Category name
                   <input
@@ -1266,7 +1324,9 @@ export function AdminDashboard() {
                     onChange={(event) => setCategoryName(event.target.value)}
                     required
                     placeholder={
-                      catalogSection === "fabric"
+                      (editingCategoryId
+                        ? categoryDraftSection
+                        : catalogSection) === "fabric"
                         ? "e.g. Italian Wool"
                         : "e.g. Watches"
                     }
@@ -1282,15 +1342,29 @@ export function AdminDashboard() {
                   />
                 </label>
                 <button type="submit" disabled={Boolean(activeAction)}>
-                  {activeAction === "Creating category" ? (
+                  {activeAction === "Creating category" ||
+                  activeAction === "Saving category" ? (
                     <Loader2 size={17} className="admin-activity-spinner" />
                   ) : (
                     <Plus size={17} />
                   )}{" "}
                   {activeAction === "Creating category"
                     ? "Creating category…"
-                    : "Create category"}
+                    : activeAction === "Saving category"
+                      ? "Saving category…"
+                      : editingCategoryId
+                        ? "Save changes"
+                        : "Create category"}
                 </button>
+                {editingCategoryId && (
+                  <button
+                    type="button"
+                    onClick={cancelCategoryEdit}
+                    disabled={Boolean(activeAction)}
+                  >
+                    Cancel
+                  </button>
+                )}
               </form>
               <div className="admin-panel">
                 <div className="admin-panel-title">
@@ -1349,6 +1423,16 @@ export function AdminDashboard() {
                                 <ChevronDown size={16} />
                               </button>
                             </span>
+                            <button
+                              className="admin-category-edit"
+                              type="button"
+                              onClick={() => editCategory(category)}
+                              disabled={Boolean(activeAction)}
+                              aria-label={`Edit ${category.name}`}
+                            >
+                              <Edit3 size={15} />
+                              <span>Edit</span>
+                            </button>
                             <button
                               onClick={() => toggleCategory(category.id)}
                               disabled={Boolean(activeAction)}

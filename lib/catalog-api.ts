@@ -153,10 +153,12 @@ const ensureOk = async (response: Response) => {
   return response;
 };
 
-export async function getStorefrontCategories() {
-  if (categoryCache) return categoryCache;
-  const stored = readSessionCache<Category[]>(CATEGORY_CACHE_KEY);
-  if (stored) return cacheCategories(stored);
+export async function getStorefrontCategories(forceRefresh = false) {
+  if (!forceRefresh) {
+    if (categoryCache) return categoryCache;
+    const stored = readSessionCache<Category[]>(CATEGORY_CACHE_KEY);
+    if (stored) return cacheCategories(stored);
+  }
   if (categoryRequest) return categoryRequest;
   categoryRequest = (async () => {
     const response = await ensureOk(
@@ -220,6 +222,7 @@ export async function updateAdminCategory(
     sortOrder?: number;
     name?: string;
     description?: string;
+    section?: "fabric" | "accessories";
   },
 ) {
   const previous = categoryCache?.find((category) => category.id === id);
@@ -250,12 +253,16 @@ export async function updateAdminCategory(
         category.id === updated.id ? updated : category,
       ),
     );
-  if (patch.name && previous && productCache)
+  if (previous && productCache && (patch.name || patch.section))
     cacheProducts(
       productCache.map((product) =>
         product.category === previous.name &&
         product.section === previous.section
-          ? { ...product, category: updated.name }
+          ? {
+              ...product,
+              category: updated.name,
+              section: updated.section,
+            }
           : product,
       ),
     );
@@ -276,10 +283,12 @@ export async function deleteAdminCategory(
     cacheCategories(categoryCache.filter((category) => category.id !== id));
 }
 
-export async function getStorefrontProducts() {
-  if (productCache) return productCache;
-  const stored = readSessionCache<Product[]>(PRODUCT_CACHE_KEY);
-  if (stored) return cacheProducts(stored);
+export async function getStorefrontProducts(forceRefresh = false) {
+  if (!forceRefresh) {
+    if (productCache) return productCache;
+    const stored = readSessionCache<Product[]>(PRODUCT_CACHE_KEY);
+    if (stored) return cacheProducts(stored);
+  }
   if (productRequest) return productRequest;
   productRequest = (async () => {
     const response = await ensureOk(

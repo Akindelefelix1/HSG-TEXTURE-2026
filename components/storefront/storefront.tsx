@@ -2327,8 +2327,8 @@ export function Storefront({
     const refresh = async () => {
       const request = ++latestRequest;
       const [productResult, categoryResult] = await Promise.allSettled([
-        getStorefrontProducts(),
-        getStorefrontCategories(),
+        getStorefrontProducts(true),
+        getStorefrontCategories(true),
       ]);
       if (!mounted || request !== latestRequest) return;
 
@@ -2350,13 +2350,20 @@ export function Storefront({
       setCatalogError(errors.join(". "));
       setCatalogLoading(false);
     };
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
     void refresh();
     window.addEventListener("hsg-products-updated", refresh);
     window.addEventListener("hsg-categories-updated", refresh);
+    window.addEventListener("focus", refreshWhenVisible);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       mounted = false;
       window.removeEventListener("hsg-products-updated", refresh);
       window.removeEventListener("hsg-categories-updated", refresh);
+      window.removeEventListener("focus", refreshWhenVisible);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, []);
   const products = managedProducts.filter(
