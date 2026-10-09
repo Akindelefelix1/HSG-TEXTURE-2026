@@ -1744,14 +1744,30 @@ footer {
   .recent-product-track .recent-product-card {
     width: 100%;
     min-width: 0;
+    box-sizing: border-box;
     height: 260px;
     flex: initial;
     padding: 12px;
   }
-  .recent-product-card .category-text b {
-    font-size: 1.2rem;
+  .recent-product-card .category-text {
+    min-width: 0;
+    width: 100%;
   }
-  .category-track .category-card {
+  .recent-product-card .category-text b {
+    display: -webkit-box;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    font-size: clamp(1rem, 4.5vw, 1.2rem);
+    line-height: 1.15;
+  }
+  .recent-product-card .category-text p {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .category-track .category-card:not(.recent-product-card) {
     width: 250px;
     height: 300px;
   }
@@ -1836,6 +1852,8 @@ footer {
 }
 .lifestyle-art {
   height: 210px;
+  position: relative;
+  overflow: hidden;
   display: grid;
   place-items: center;
 }
@@ -2469,12 +2487,17 @@ footer {
   color: var(--muted);
   line-height: 1.7;
 }
-.lifestyle-art > span {
+.lifestyle-art > .lifestyle-art-fallback {
+  position: relative;
+  z-index: 1;
   font:
     400 5rem Georgia,
     serif;
   color: var(--ink);
   filter: drop-shadow(0 16px 16px #101b3525);
+}
+.lifestyle-art .product-media-cover {
+  z-index: 2;
 }
 .accessories-view .catalog-tools {
   flex-direction: column;

@@ -1420,7 +1420,7 @@ function Listing({
                     className="lifestyle-art"
                     aria-label={`View ${item.name}`}
                   >
-                    <span aria-hidden="true">
+                    <span className="lifestyle-art-fallback" aria-hidden="true">
                       {item.texture === "fragrance" ||
                       item.texture === "perfume-oil"
                         ? "✦"
@@ -1430,6 +1430,7 @@ function Listing({
                             ? "◇"
                             : "◆"}
                     </span>
+                    <ProductMediaView product={item} />
                   </Link>
                   <div>
                     <small>{item.category}</small>
