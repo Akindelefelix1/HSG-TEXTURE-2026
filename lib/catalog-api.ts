@@ -192,7 +192,6 @@ export async function createAdminCategory(
     section: "fabric" | "accessories";
   },
 ) {
-  const previous = categoryCache?.find((category) => category.id === id);
   const slug = input.name
     .toLowerCase()
     .trim()
@@ -223,6 +222,7 @@ export async function updateAdminCategory(
     description?: string;
   },
 ) {
+  const previous = categoryCache?.find((category) => category.id === id);
   const body = patch.name
     ? {
         ...patch,
@@ -250,17 +250,15 @@ export async function updateAdminCategory(
         category.id === updated.id ? updated : category,
       ),
     );
-  if (patch.name && productCache) {
-    if (previous)
-      cacheProducts(
-        productCache.map((product) =>
-          product.category === previous.name &&
-          product.section === previous.section
-            ? { ...product, category: updated.name }
-            : product,
-        ),
-      );
-  }
+  if (patch.name && previous && productCache)
+    cacheProducts(
+      productCache.map((product) =>
+        product.category === previous.name &&
+        product.section === previous.section
+          ? { ...product, category: updated.name }
+          : product,
+      ),
+    );
   return updated;
 }
 export async function deleteAdminCategory(
