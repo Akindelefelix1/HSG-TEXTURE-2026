@@ -5,7 +5,7 @@ import {
 } from "@/lib/catalog-admin";
 
 const DEFAULT_API_URL = "https://hsg-be.onrender.com";
-const SETTINGS_CACHE_KEY = "hsg-site-settings-api-v1";
+export const SITE_SETTINGS_CACHE_KEY = "hsg-site-settings-api-v1";
 const apiUrl = () =>
   process.env.NEXT_PUBLIC_HSG_API_URL?.trim().replace(/\/+$/g, "") ||
   DEFAULT_API_URL;
@@ -19,7 +19,7 @@ export function getCachedSiteSettings(): SiteSettings {
   try {
     return normalize(
       JSON.parse(
-        window.localStorage.getItem(SETTINGS_CACHE_KEY) || "null",
+        window.localStorage.getItem(SITE_SETTINGS_CACHE_KEY) || "null",
       ) as Partial<SiteSettings> | null,
     );
   } catch {
@@ -30,7 +30,10 @@ export function getCachedSiteSettings(): SiteSettings {
 function cacheSiteSettings(settings: SiteSettings) {
   const normalized = normalize(settings);
   if (typeof window !== "undefined")
-    window.localStorage.setItem(SETTINGS_CACHE_KEY, JSON.stringify(normalized));
+    window.localStorage.setItem(
+      SITE_SETTINGS_CACHE_KEY,
+      JSON.stringify(normalized),
+    );
   return normalized;
 }
 
@@ -90,11 +93,11 @@ export async function updateAdminSiteSettings(
 }
 
 export function preloadSiteImage(url?: string) {
-  if (!url || typeof window === "undefined") return Promise.resolve();
-  return new Promise<void>((resolve) => {
+  if (!url || typeof window === "undefined") return Promise.resolve(true);
+  return new Promise<boolean>((resolve) => {
     const image = new Image();
-    image.onload = () => resolve();
-    image.onerror = () => resolve();
+    image.onload = () => resolve(true);
+    image.onerror = () => resolve(false);
     image.src = url;
   });
 }

@@ -63,6 +63,7 @@ export class SiteSettingsService {
 
   async update(dto: UpdateSiteSettingsDto) {
     const current = await this.record();
+    const previousHeroImageKey = current.heroImageKey;
     const { heroImageKey, ...content } = dto;
     current.content = {
       ...defaultSiteSettings,
@@ -71,6 +72,17 @@ export class SiteSettingsService {
     };
     if (heroImageKey !== undefined) current.heroImageKey = heroImageKey;
     await this.settings.save(current);
+    if (
+      heroImageKey &&
+      previousHeroImageKey &&
+      heroImageKey !== previousHeroImageKey
+    ) {
+      try {
+        await this.storage.remove(previousHeroImageKey);
+      } catch {
+        // A cleanup failure must not roll back the newly saved storefront.
+      }
+    }
     return this.get();
   }
 }

@@ -44,6 +44,7 @@ import {
   getCachedSiteSettings,
   getSiteSettings,
   preloadSiteImage,
+  SITE_SETTINGS_CACHE_KEY,
 } from "@/lib/site-settings-api";
 import { formatNaira, toProductSlug } from "@/lib/storefront";
 import type { Category, Product, StorefrontView } from "@/types/storefront";
@@ -78,6 +79,7 @@ const CatalogContext = createContext<CatalogValue>({
   categories: [],
   loading: true,
 });
+const SiteSettingsContext = createContext<SiteSettings>(defaultSiteSettings);
 const WHATSAPP_NUMBER = "2348107050824";
 const whatsappOrderUrl = (message: string) =>
   `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
@@ -137,8 +139,7 @@ function Header({
 }) {
   const [menu, setMenu] = useState(false);
   const [search, setSearch] = useState(false);
-  const [siteSettings, setSiteSettings] =
-    useState<SiteSettings>(defaultSiteSettings);
+  const siteSettings = useContext(SiteSettingsContext);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const categorySection =
@@ -153,77 +154,6 @@ function Header({
     { href: "/about", label: "Our story" },
     { href: "/contact", label: "Contact" },
   ];
-  useEffect(() => {
-    let mounted = true;
-    const cached = getCachedSiteSettings();
-    queueMicrotask(() => {
-      if (mounted) setSiteSettings(cached);
-    });
-    const refresh = async () => {
-      try {
-        const next = await getSiteSettings();
-        await preloadSiteImage(next.heroImageUrl);
-        if (mounted) setSiteSettings(next);
-      } catch {
-        // Keep the currently rendered defaults or last successful settings.
-      }
-    };
-    const syncCached = async () => {
-      const next = getCachedSiteSettings();
-      await preloadSiteImage(next.heroImageUrl);
-      if (mounted) setSiteSettings(next);
-    };
-    void refresh();
-    window.addEventListener("storage", syncCached);
-    window.addEventListener("hsg-site-settings-updated", refresh);
-    return () => {
-      mounted = false;
-      window.removeEventListener("storage", syncCached);
-      window.removeEventListener("hsg-site-settings-updated", refresh);
-    };
-  }, []);
-  useEffect(() => {
-    const hero = document.querySelector(".hero");
-    if (!hero) return;
-    const eyebrow = hero.querySelector<HTMLElement>(".hero-copy .eyebrow");
-    const heading = hero.querySelector<HTMLElement>(".hero-copy h1");
-    const description = hero.querySelector<HTMLElement>(
-      ".hero-copy>p:not(.eyebrow)",
-    );
-    const links = hero.querySelectorAll<HTMLAnchorElement>(".hero-buttons a");
-    const trust = hero.querySelectorAll<HTMLElement>(".hero-trust span");
-    const note = hero.querySelector<HTMLElement>(".image-note");
-    if (eyebrow) eyebrow.textContent = siteSettings.heroEyebrow;
-    if (heading)
-      heading.innerHTML = `${siteSettings.heroTitle}<br><em>${siteSettings.heroAccent}</em>`;
-    if (description) description.textContent = siteSettings.heroDescription;
-    if (links[0]) {
-      links[0].textContent = siteSettings.primaryLabel;
-      links[0].href = siteSettings.primaryHref;
-    }
-    if (links[1]) {
-      links[1].childNodes[0].textContent = `${siteSettings.secondaryLabel} `;
-      links[1].href = siteSettings.secondaryHref;
-    }
-    if (trust[0]?.lastChild)
-      trust[0].lastChild.textContent = ` ${siteSettings.trustOne}`;
-    if (trust[1]?.lastChild)
-      trust[1].lastChild.textContent = ` ${siteSettings.trustTwo}`;
-    if (note?.lastChild)
-      note.lastChild.textContent = ` ${siteSettings.imageNote}`;
-    if (siteSettings.heroImageUrl) {
-      const image = hero.querySelector<HTMLElement>(".hero-image");
-      if (image)
-        image.style.backgroundImage = `url(${siteSettings.heroImageUrl})`;
-    } else if (siteSettings.heroImageId)
-      void getProductMedia(siteSettings.heroImageId).then((blob) => {
-        if (blob) {
-          const url = URL.createObjectURL(blob);
-          const image = hero.querySelector<HTMLElement>(".hero-image");
-          if (image) image.style.backgroundImage = `url(${url})`;
-        }
-      });
-  }, [siteSettings]);
   return (
     <>
       <div className="announcement">
@@ -1024,6 +954,7 @@ function CategoryRail({
 
 function HomeView({ add }: { add: () => void }) {
   const { products, categories, loading } = useContext(CatalogContext);
+  const siteSettings = useContext(SiteSettingsContext);
   const featuredCategories = categories
     .filter((category) => (category.section ?? "fabric") === "fabric")
     .map((category) => category.name);
@@ -1031,27 +962,27 @@ function HomeView({ add }: { add: () => void }) {
     <main>
       <section className="hero">
         <div className="hero-copy">
-          <p className="eyebrow">The new textile edit</p>
+          <p className="eyebrow">{siteSettings.heroEyebrow}</p>
           <h1>
-            Find the fabric.
+            {siteSettings.heroTitle}
             <br />
-            <em>Make it yours.</em>
+            <em>{siteSettings.heroAccent}</em>
           </h1>
-          <p>{defaultSiteSettings.heroDescription}</p>
+          <p>{siteSettings.heroDescription}</p>
           <div className="hero-buttons">
-            <Link href="/products" className="primary">
-              Shop new arrivals
+            <Link href={siteSettings.primaryHref} className="primary">
+              {siteSettings.primaryLabel}
             </Link>
-            <Link href="/category" className="text-link">
-              Explore collections <ChevronRight size={16} />
+            <Link href={siteSettings.secondaryHref} className="text-link">
+              {siteSettings.secondaryLabel} <ChevronRight size={16} />
             </Link>
           </div>
           <div className="hero-trust">
             <span>
-              <Truck size={17} /> Nationwide delivery
+              <Truck size={17} /> {siteSettings.trustOne}
             </span>
             <span>
-              <Sparkles size={17} /> Curated quality
+              <Sparkles size={17} /> {siteSettings.trustTwo}
             </span>
           </div>
         </div>
@@ -1059,9 +990,14 @@ function HomeView({ add }: { add: () => void }) {
           className="hero-image"
           role="img"
           aria-label="Blue, gold, ivory and patterned fabrics"
+          style={
+            siteSettings.heroImageUrl
+              ? { backgroundImage: `url(${siteSettings.heroImageUrl})` }
+              : undefined
+          }
         >
           <span className="image-note">
-            <i /> Texture you can almost feel
+            <i /> {siteSettings.imageNote}
           </span>
         </div>
       </section>
@@ -2300,6 +2236,53 @@ export function Storefront({
     "hsg-texture-favorites",
     [],
   );
+  const [siteSettings, setSiteSettings] =
+    useState<SiteSettings>(defaultSiteSettings);
+  useEffect(() => {
+    let mounted = true;
+    let latestRequest = 0;
+    const commit = async (next: SiteSettings, request: number) => {
+      const imageReady = await preloadSiteImage(next.heroImageUrl);
+      if (!mounted || request !== latestRequest) return;
+      setSiteSettings((current) =>
+        imageReady
+          ? next
+          : {
+              ...next,
+              heroImageKey: current.heroImageKey,
+              heroImageUrl: current.heroImageUrl,
+            },
+      );
+    };
+    const applyCached = () => {
+      const request = ++latestRequest;
+      void commit(getCachedSiteSettings(), request);
+    };
+    const refresh = async () => {
+      const request = ++latestRequest;
+      try {
+        await commit(await getSiteSettings(), request);
+      } catch {
+        // Keep the currently rendered defaults or last successful settings.
+      }
+    };
+    const initialize = async () => {
+      const request = ++latestRequest;
+      await commit(getCachedSiteSettings(), request);
+      if (mounted && request === latestRequest) await refresh();
+    };
+    void initialize();
+    const syncCached = (event: StorageEvent) => {
+      if (event.key === SITE_SETTINGS_CACHE_KEY) applyCached();
+    };
+    window.addEventListener("storage", syncCached);
+    window.addEventListener("hsg-site-settings-updated", refresh);
+    return () => {
+      mounted = false;
+      window.removeEventListener("storage", syncCached);
+      window.removeEventListener("hsg-site-settings-updated", refresh);
+    };
+  }, []);
   useEffect(() => {
     let mounted = true;
     let latestRequest = 0;
@@ -2386,57 +2369,61 @@ export function Storefront({
   };
   const catalogValue = { products, categories, loading: catalogLoading };
   return (
-    <CatalogContext.Provider value={catalogValue}>
-      <FavoriteContext.Provider value={favoriteValue}>
-        <div>
-          <Header
-            cart={count}
-            favorites={favorites.length}
-            openCart={() => setDrawer(true)}
-            openFavorites={() => setFavoritesDrawer(true)}
-          />
-          {catalogError && (
-            <div className="catalog-api-error" role="alert">
-              The live catalogue could not be fully loaded. {catalogError} Check
-              the backend connection and refresh the page.
-            </div>
-          )}
-          {view === "home" && <HomeView add={addCardProduct} />}{" "}
-          {view === "category" && <Listing category add={addCardProduct} />}{" "}
-          {view === "products" && <Listing add={addCardProduct} />}{" "}
-          {view === "product-detail" && liveSlug && (
-            <ProductDetail
-              slug={liveSlug}
-              add={(quantity) => detailProduct && add(detailProduct, quantity)}
+    <SiteSettingsContext.Provider value={siteSettings}>
+      <CatalogContext.Provider value={catalogValue}>
+        <FavoriteContext.Provider value={favoriteValue}>
+          <div>
+            <Header
+              cart={count}
+              favorites={favorites.length}
+              openCart={() => setDrawer(true)}
+              openFavorites={() => setFavoritesDrawer(true)}
             />
-          )}{" "}
-          {view === "about" && <About />} {view === "contact" && <Contact />}
-          <Footer />
-          <WhatsAppButton />
-          <StorefrontBottomNav
-            pathname={pathname}
-            categorySection={categorySection}
-            cart={count}
-            favorites={favorites.length}
-            openCart={() => setDrawer(true)}
-            openFavorites={() => setFavoritesDrawer(true)}
-          />
-          <CartDrawer
-            open={drawer}
-            close={() => setDrawer(false)}
-            items={cart}
-            update={update}
-            clear={() => setCart([])}
-          />
-          <FavoritesDrawer
-            open={favoritesDrawer}
-            close={() => setFavoritesDrawer(false)}
-            items={favorites}
-            add={(product) => addToCart(product)}
-            toggle={toggleFavorite}
-          />
-        </div>
-      </FavoriteContext.Provider>
-    </CatalogContext.Provider>
+            {catalogError && (
+              <div className="catalog-api-error" role="alert">
+                The live catalogue could not be fully loaded. {catalogError}{" "}
+                Check the backend connection and refresh the page.
+              </div>
+            )}
+            {view === "home" && <HomeView add={addCardProduct} />}{" "}
+            {view === "category" && <Listing category add={addCardProduct} />}{" "}
+            {view === "products" && <Listing add={addCardProduct} />}{" "}
+            {view === "product-detail" && liveSlug && (
+              <ProductDetail
+                slug={liveSlug}
+                add={(quantity) =>
+                  detailProduct && add(detailProduct, quantity)
+                }
+              />
+            )}{" "}
+            {view === "about" && <About />} {view === "contact" && <Contact />}
+            <Footer />
+            <WhatsAppButton />
+            <StorefrontBottomNav
+              pathname={pathname}
+              categorySection={categorySection}
+              cart={count}
+              favorites={favorites.length}
+              openCart={() => setDrawer(true)}
+              openFavorites={() => setFavoritesDrawer(true)}
+            />
+            <CartDrawer
+              open={drawer}
+              close={() => setDrawer(false)}
+              items={cart}
+              update={update}
+              clear={() => setCart([])}
+            />
+            <FavoritesDrawer
+              open={favoritesDrawer}
+              close={() => setFavoritesDrawer(false)}
+              items={favorites}
+              add={(product) => addToCart(product)}
+              toggle={toggleFavorite}
+            />
+          </div>
+        </FavoriteContext.Provider>
+      </CatalogContext.Provider>
+    </SiteSettingsContext.Provider>
   );
 }
