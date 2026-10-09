@@ -15,6 +15,10 @@ export type Product = {
   color: string;
   texture: string;
   description?: string;
+  composition?: string;
+  width?: string;
+  feel?: string;
+  care?: string;
   image?: string;
   media?: ProductMedia[];
   coverMediaId?: string;

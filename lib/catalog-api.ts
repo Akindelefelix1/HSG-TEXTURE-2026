@@ -9,6 +9,10 @@ type ApiCategory = {
   name: string;
   slug: string;
   description: string;
+  composition?: string;
+  width?: string;
+  feel?: string;
+  care?: string;
   section: "fabric" | "accessories";
   sortOrder: number;
   active: boolean;
@@ -25,6 +29,10 @@ type ApiProduct = {
   name: string;
   price: number;
   description: string;
+  composition?: string | null;
+  width?: string | null;
+  feel?: string | null;
+  care?: string | null;
   color: string;
   texture: string;
   badge?: string;
@@ -61,6 +69,10 @@ const toProduct = (product: ApiProduct): Product => ({
   color: product.color,
   texture: product.texture,
   description: product.description || undefined,
+  composition: product.composition || undefined,
+  width: product.width || undefined,
+  feel: product.feel || undefined,
+  care: product.care || undefined,
   image:
     product.gallery?.[0]?.key && product.imageUrl
       ? normalizeMediaUrl(product.imageUrl, product.gallery[0].key)
@@ -204,6 +216,10 @@ type ProductInput = {
   name: string;
   price: number;
   description?: string;
+  composition?: string;
+  width?: string;
+  feel?: string;
+  care?: string;
   color: string;
   texture: string;
   badge?: string;
@@ -220,6 +236,10 @@ const productBody = (input: ProductInput) => ({
     .replace(/^-|-$/g, ""),
   price: input.price,
   description: input.description ?? "",
+  composition: input.composition ?? null,
+  width: input.width ?? null,
+  feel: input.feel ?? null,
+  care: input.care ?? null,
   color: input.color,
   texture: input.texture,
   badge: input.badge ?? null,

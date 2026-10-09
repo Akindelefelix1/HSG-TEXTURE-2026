@@ -83,6 +83,10 @@ type ProductDraft = {
   name: string;
   category: string;
   price: string;
+  composition: string;
+  width: string;
+  feel: string;
+  care: string;
   color: string;
   texture: string;
   description: string;
@@ -96,6 +100,10 @@ const emptyProduct: ProductDraft = {
   name: "",
   category: "",
   price: "",
+  composition: "",
+  width: "",
+  feel: "",
+  care: "",
   color: "#183b8f",
   texture: "woven",
   description: "",
@@ -451,6 +459,10 @@ export function AdminDashboard() {
             name: product.name,
             category: product.category,
             price: String(product.price),
+            composition: product.composition ?? "",
+            width: product.width ?? "",
+            feel: product.feel ?? "",
+            care: product.care ?? "",
             color: product.color,
             texture: product.texture,
             description: product.description ?? "",
@@ -559,6 +571,10 @@ export function AdminDashboard() {
             price,
             categoryId: category.id,
             description: draft.description.trim() || undefined,
+            composition: draft.composition.trim() || undefined,
+            width: draft.width.trim() || undefined,
+            feel: draft.feel.trim() || undefined,
+            care: draft.care.trim() || undefined,
             color: draft.color,
             texture: draft.texture.trim() || "woven",
             badge: draft.badge.trim() || undefined,
@@ -1589,6 +1605,46 @@ export function AdminDashboard() {
                     setDraft({ ...draft, name: event.target.value })
                   }
                   placeholder="Product name"
+                />
+              </label>
+              <label>
+                Composition (optional)
+                <input
+                  value={draft.composition}
+                  onChange={(event) =>
+                    setDraft({ ...draft, composition: event.target.value })
+                  }
+                  placeholder="e.g. Premium blended textile"
+                />
+              </label>
+              <label>
+                Width (optional)
+                <input
+                  value={draft.width}
+                  onChange={(event) =>
+                    setDraft({ ...draft, width: event.target.value })
+                  }
+                  placeholder="e.g. 58–60 inches"
+                />
+              </label>
+              <label>
+                Feel (optional)
+                <input
+                  value={draft.feel}
+                  onChange={(event) =>
+                    setDraft({ ...draft, feel: event.target.value })
+                  }
+                  placeholder="e.g. Soft, structured handle"
+                />
+              </label>
+              <label>
+                Care (optional)
+                <input
+                  value={draft.care}
+                  onChange={(event) =>
+                    setDraft({ ...draft, care: event.target.value })
+                  }
+                  placeholder="e.g. Dry clean recommended"
                 />
               </label>
               <label>

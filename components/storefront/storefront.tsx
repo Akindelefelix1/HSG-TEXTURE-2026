@@ -18,14 +18,17 @@ import {
   ChevronRight,
   Copy,
   Heart,
+  House,
   Loader2,
   Menu,
   Minus,
+  Package,
   Plus,
   Search,
   Share2,
   ShoppingBag,
   Sparkles,
+  Tags,
   Truck,
   X,
 } from "lucide-react";
@@ -401,6 +404,72 @@ function ProductMediaView({
         <img src={media.url} alt="" />
       )}
     </span>
+  );
+}
+function StorefrontBottomNav({
+  pathname,
+  categorySection,
+  cart,
+  favorites,
+  openCart,
+  openFavorites,
+}: {
+  pathname: string;
+  categorySection: "fabric" | "accessories";
+  cart: number;
+  favorites: number;
+  openCart: () => void;
+  openFavorites: () => void;
+}) {
+  const links = [
+    { href: "/", label: "Home", Icon: House, active: pathname === "/" },
+    {
+      href: "/products",
+      label: "Products",
+      Icon: Package,
+      active: pathname === "/products" || pathname.startsWith("/product"),
+    },
+    {
+      href:
+        categorySection === "accessories"
+          ? "/category?section=accessories"
+          : "/category",
+      label: "Categories",
+      Icon: Tags,
+      active: pathname === "/category",
+    },
+  ];
+
+  return (
+    <nav className="storefront-bottom-nav" aria-label="Store navigation">
+      {links.map(({ href, label, Icon, active }) => (
+        <Link
+          key={label}
+          href={href}
+          className={active ? "active" : ""}
+          aria-current={active ? "page" : undefined}
+        >
+          <Icon size={21} strokeWidth={1.8} />
+          <span>{label}</span>
+        </Link>
+      ))}
+      <button type="button" onClick={openFavorites} aria-label="Open favourites">
+        <span className="storefront-bottom-icon">
+          <Heart size={21} strokeWidth={1.8} />
+          {favorites > 0 && (
+            <span className="storefront-bottom-count">{favorites}</span>
+          )}
+        </span>
+        <span>Favourites</span>
+      </button>
+      <button type="button" onClick={openCart} aria-label="Open shopping bag">
+        <span className="storefront-bottom-icon">
+          <ShoppingBag size={21} strokeWidth={1.8} />
+          {cart > 0 && <span className="storefront-bottom-count">{cart}</span>}
+        </span>
+        <span>Bag</span>
+      </button>
+    </nav>
   );
 }
 function ProductCard({
@@ -1498,9 +1567,15 @@ function ProductDetail({
           style={{ "--swatch": product.color } as React.CSSProperties}
         >
           {product.badge && <span className="badge">{product.badge}</span>}
-          <span className="fabric-roll one" />
-          <span className="fabric-roll two" />
-          <span className="fabric-fold" />
+          {product.media?.length || product.image ? (
+            <ProductMediaView product={product} all />
+          ) : (
+            <>
+              <span className="fabric-roll one" />
+              <span className="fabric-roll two" />
+              <span className="fabric-fold" />
+            </>
+          )}
         </div>
         <div className="product-detail-copy">
           <p className="eyebrow">{product.category} collection</p>
@@ -1514,24 +1589,35 @@ function ProductDetail({
                 ? "A considered finishing touch selected to complete your look with character."
                 : "A carefully selected fabric with a beautiful hand, assured structure and an elegant finish. Designed to cut cleanly and drape with confidence for considered everyday and occasion wear.")}
           </p>
-          {!isAccessory && (
+          {(product.composition ||
+            product.width ||
+            product.feel ||
+            product.care) && (
             <dl className="fabric-specs">
-              <div>
-                <dt>Composition</dt>
-                <dd>Premium blended textile</dd>
-              </div>
-              <div>
-                <dt>Width</dt>
-                <dd>58–60 inches</dd>
-              </div>
-              <div>
-                <dt>Feel</dt>
-                <dd>Soft, structured handle</dd>
-              </div>
-              <div>
-                <dt>Care</dt>
-                <dd>Dry clean recommended</dd>
-              </div>
+              {product.composition && (
+                <div>
+                  <dt>Composition</dt>
+                  <dd>{product.composition}</dd>
+                </div>
+              )}
+              {product.width && (
+                <div>
+                  <dt>Width</dt>
+                  <dd>{product.width}</dd>
+                </div>
+              )}
+              {product.feel && (
+                <div>
+                  <dt>Feel</dt>
+                  <dd>{product.feel}</dd>
+                </div>
+              )}
+              {product.care && (
+                <div>
+                  <dt>Care</dt>
+                  <dd>{product.care}</dd>
+                </div>
+              )}
             </dl>
           )}
           <div className="trouser-selector">
@@ -2117,8 +2203,11 @@ export function Storefront({
   view: StorefrontView;
   productSlug?: string;
 }) {
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const liveSlug = slug ?? searchParams.get("slug") ?? undefined;
+  const categorySection =
+    searchParams.get("section") === "accessories" ? "accessories" : "fabric";
   const [cart, setCart] = useLocalStorageState<CartItem[]>(
     "hsg-texture-cart",
     [],
@@ -2251,6 +2340,14 @@ export function Storefront({
           {view === "about" && <About />} {view === "contact" && <Contact />}
           <Footer />
           <WhatsAppButton />
+          <StorefrontBottomNav
+            pathname={pathname}
+            categorySection={categorySection}
+            cart={count}
+            favorites={favorites.length}
+            openCart={() => setDrawer(true)}
+            openFavorites={() => setFavoritesDrawer(true)}
+          />
           <CartDrawer
             open={drawer}
             close={() => setDrawer(false)}
