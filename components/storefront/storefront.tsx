@@ -61,7 +61,11 @@ type FavoriteActions = {
   names: Set<string>;
   toggle: (product: Product) => void;
 };
-type CatalogValue = { products: Product[]; categories: Category[] };
+type CatalogValue = {
+  products: Product[];
+  categories: Category[];
+  loading: boolean;
+};
 const FavoriteContext = createContext<FavoriteActions>({
   names: new Set(),
   toggle: () => undefined,
@@ -69,6 +73,7 @@ const FavoriteContext = createContext<FavoriteActions>({
 const CatalogContext = createContext<CatalogValue>({
   products: [],
   categories: [],
+  loading: true,
 });
 const WHATSAPP_NUMBER = "2348107050824";
 const whatsappOrderUrl = (message: string) =>
@@ -435,8 +440,7 @@ function StorefrontBottomNav({
       href: "/category?section=accessories",
       label: "Accessories",
       Icon: Tags,
-      active:
-        pathname === "/category" && categorySection === "accessories",
+      active: pathname === "/category" && categorySection === "accessories",
     },
   ];
 
@@ -453,7 +457,11 @@ function StorefrontBottomNav({
           <span>{label}</span>
         </Link>
       ))}
-      <button type="button" onClick={openFavorites} aria-label="Open favourites">
+      <button
+        type="button"
+        onClick={openFavorites}
+        aria-label="Open favourites"
+      >
         <span className="storefront-bottom-icon">
           <Heart size={21} strokeWidth={1.8} />
           {favorites > 0 && (
@@ -940,14 +948,47 @@ function CartDrawer({
     </div>
   );
 }
-function CategoryRail({ products }: { products: Product[] }) {
+function ProductGridSkeleton({ count = 4 }: { count?: number }) {
+  return (
+    <div
+      className="product-grid product-grid-skeleton"
+      aria-label="Loading products"
+      aria-busy="true"
+    >
+      {Array.from({ length: count }, (_, index) => (
+        <article className="product-skeleton" key={index} aria-hidden="true">
+          <span className="skeleton-block skeleton-product-art" />
+          <span className="skeleton-block skeleton-kicker" />
+          <span className="skeleton-block skeleton-title" />
+          <span className="skeleton-block skeleton-price" />
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function CategoryRail({
+  products,
+  loading,
+}: {
+  products: Product[];
+  loading: boolean;
+}) {
+  if (loading)
+    return (
+      <div
+        className="category-rail-skeleton"
+        aria-label="Loading new products"
+        aria-busy="true"
+      >
+        {Array.from({ length: 4 }, (_, index) => (
+          <span className="skeleton-block" key={index} aria-hidden="true" />
+        ))}
+      </div>
+    );
   const latestProducts = products.slice(0, 10);
   if (!latestProducts.length)
-    return (
-      <p className="categories-empty">
-        New products are coming soon.
-      </p>
-    );
+    return <p className="categories-empty">New products are coming soon.</p>;
   return (
     <div className="category-rail" aria-label="Recently uploaded products">
       <div className="category-track recent-product-track">
@@ -974,7 +1015,7 @@ function CategoryRail({ products }: { products: Product[] }) {
 }
 
 function HomeView({ add }: { add: () => void }) {
-  const { products, categories } = useContext(CatalogContext);
+  const { products, categories, loading } = useContext(CatalogContext);
   const featuredCategories = categories
     .filter((category) => (category.section ?? "fabric") === "fabric")
     .map((category) => category.name);
@@ -1023,8 +1064,19 @@ function HomeView({ add }: { add: () => void }) {
           href="/products"
           link="View all products"
         />
-        <CategoryRail products={products} />
+        <CategoryRail products={products} loading={loading} />
       </section>
+      {loading && (
+        <section className="products-section home-category-section">
+          <SectionTitle
+            eyebrow="Featured collections"
+            title="Loading the collection"
+            href="/products"
+            link="View all products"
+          />
+          <ProductGridSkeleton />
+        </section>
+      )}
       <div className="home-category-sections">
         {featuredCategories.map((category, index) => (
           <section
@@ -1242,7 +1294,7 @@ function Listing({
   category?: boolean;
   add: (product: Product) => void;
 }) {
-  const { products, categories } = useContext(CatalogContext);
+  const { products, categories, loading } = useContext(CatalogContext);
   const searchParams = useSearchParams();
   const section =
     searchParams.get("section") === "accessories" ? "accessories" : "fabric";
@@ -1350,15 +1402,19 @@ function Listing({
             onMinPriceChange={setFabricMinPrice}
             onMaxPriceChange={setFabricMaxPrice}
           />
-          <div className="product-grid">
-            {shown.map((product) => (
-              <ProductCard
-                key={product.id ?? product.name}
-                product={product}
-                add={add}
-              />
-            ))}
-          </div>
+          {loading ? (
+            <ProductGridSkeleton count={8} />
+          ) : (
+            <div className="product-grid">
+              {shown.map((product) => (
+                <ProductCard
+                  key={product.id ?? product.name}
+                  product={product}
+                  add={add}
+                />
+              ))}
+            </div>
+          )}
         </section>
       ) : (
         <section className="accessories-view">
@@ -1395,7 +1451,9 @@ function Listing({
             onMinPriceChange={setAccessoryMinPrice}
             onMaxPriceChange={setAccessoryMaxPrice}
           />
-          {shownAccessories.length > 0 ? (
+          {loading ? (
+            <ProductGridSkeleton count={6} />
+          ) : shownAccessories.length > 0 ? (
             <div className="lifestyle-grid">
               {shownAccessories.map((item, index) => (
                 <article
@@ -1523,8 +1581,25 @@ function ProductDetail({
   add: (quantity: number) => void;
 }) {
   const [quantity, setQuantity] = useState(1);
-  const { products } = useContext(CatalogContext);
+  const { products, loading } = useContext(CatalogContext);
   const product = products.find((item) => toProductSlug(item.name) === slug);
+  if (loading && !product)
+    return (
+      <main
+        className="product-detail product-detail-skeleton"
+        aria-label="Loading product"
+        aria-busy="true"
+      >
+        <div className="skeleton-block skeleton-detail-media" />
+        <div className="skeleton-detail-copy">
+          <span className="skeleton-block skeleton-kicker" />
+          <span className="skeleton-block skeleton-detail-title" />
+          <span className="skeleton-block skeleton-price" />
+          <span className="skeleton-block skeleton-detail-line" />
+          <span className="skeleton-block skeleton-detail-line short" />
+        </div>
+      </main>
+    );
   if (!product)
     return (
       <main className="missing-product">
@@ -2062,7 +2137,8 @@ function FavoritesDrawer({
                         <b>{product.name}</b>
                       </Link>
                       <p>
-                        {formatNaira(product.price)} / {productSaleUnit(product)}
+                        {formatNaira(product.price)} /{" "}
+                        {productSaleUnit(product)}
                       </p>
                       <div className="favorite-actions">
                         <button
@@ -2300,7 +2376,7 @@ export function Storefront({
     names: new Set(favorites.map((item) => item.name)),
     toggle: toggleFavorite,
   };
-  const catalogValue = { products, categories };
+  const catalogValue = { products, categories, loading: catalogLoading };
   return (
     <CatalogContext.Provider value={catalogValue}>
       <FavoriteContext.Provider value={favoriteValue}>
@@ -2311,11 +2387,6 @@ export function Storefront({
             openCart={() => setDrawer(true)}
             openFavorites={() => setFavoritesDrawer(true)}
           />
-          {catalogLoading && (
-            <div className="catalog-api-error" role="status">
-              Loading the live catalogue…
-            </div>
-          )}
           {catalogError && (
             <div className="catalog-api-error" role="alert">
               The live catalogue could not be fully loaded. {catalogError} Check

@@ -4,6 +4,46 @@ const DEFAULT_API_URL = "https://hsg-be.onrender.com";
 const apiUrl = () =>
   process.env.NEXT_PUBLIC_HSG_API_URL?.trim().replace(/\/+$/g, "") ||
   DEFAULT_API_URL;
+const PRODUCT_CACHE_KEY = "hsg-catalog-products-v1";
+const CATEGORY_CACHE_KEY = "hsg-catalog-categories-v1";
+let productCache: Product[] | null = null;
+let categoryCache: Category[] | null = null;
+let productRequest: Promise<Product[]> | null = null;
+let categoryRequest: Promise<Category[]> | null = null;
+
+function readSessionCache<T>(key: string): T | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const value = window.sessionStorage.getItem(key);
+    return value ? (JSON.parse(value) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionCache<T>(key: string, value: T) {
+  if (typeof window === "undefined") return;
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // The in-memory cache still works when storage is unavailable or full.
+  }
+}
+
+function cacheProducts(products: Product[]) {
+  productCache = products;
+  writeSessionCache(PRODUCT_CACHE_KEY, products);
+  return products;
+}
+
+function cacheCategories(categories: Category[]) {
+  const ordered = [...categories].sort(
+    (left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0),
+  );
+  categoryCache = ordered;
+  writeSessionCache(CATEGORY_CACHE_KEY, ordered);
+  return ordered;
+}
 type ApiCategory = {
   id: string;
   name: string;
@@ -114,10 +154,23 @@ const ensureOk = async (response: Response) => {
 };
 
 export async function getStorefrontCategories() {
-  const response = await ensureOk(
-    await fetch(`${apiUrl()}/api/v1/catalog/categories`, { cache: "no-store" }),
-  );
-  return ((await response.json()) as ApiCategory[]).map(toCategory);
+  if (categoryCache) return categoryCache;
+  const stored = readSessionCache<Category[]>(CATEGORY_CACHE_KEY);
+  if (stored) return cacheCategories(stored);
+  if (categoryRequest) return categoryRequest;
+  categoryRequest = (async () => {
+    const response = await ensureOk(
+      await fetch(`${apiUrl()}/api/v1/catalog/categories`, {
+        cache: "no-store",
+      }),
+    );
+    return cacheCategories(
+      ((await response.json()) as ApiCategory[]).map(toCategory),
+    );
+  })().finally(() => {
+    categoryRequest = null;
+  });
+  return categoryRequest;
 }
 export async function getAdminCategories(baseUrl: string, token: string) {
   const response = await ensureOk(
@@ -126,7 +179,9 @@ export async function getAdminCategories(baseUrl: string, token: string) {
       cache: "no-store",
     }),
   );
-  return ((await response.json()) as ApiCategory[]).map(toCategory);
+  return cacheCategories(
+    ((await response.json()) as ApiCategory[]).map(toCategory),
+  );
 }
 export async function createAdminCategory(
   baseUrl: string,
@@ -152,7 +207,9 @@ export async function createAdminCategory(
       body: JSON.stringify({ ...input, slug, active: true }),
     }),
   );
-  return toCategory((await response.json()) as ApiCategory);
+  const created = toCategory((await response.json()) as ApiCategory);
+  cacheCategories([...(categoryCache ?? []), created]);
+  return created;
 }
 export async function updateAdminCategory(
   baseUrl: string,
@@ -170,7 +227,14 @@ export async function updateAdminCategory(
       body: JSON.stringify(patch),
     }),
   );
-  return toCategory((await response.json()) as ApiCategory);
+  const updated = toCategory((await response.json()) as ApiCategory);
+  if (categoryCache)
+    cacheCategories(
+      categoryCache.map((category) =>
+        category.id === updated.id ? updated : category,
+      ),
+    );
+  return updated;
 }
 export async function deleteAdminCategory(
   baseUrl: string,
@@ -183,13 +247,26 @@ export async function deleteAdminCategory(
       headers: { Authorization: `Bearer ${token}` },
     }),
   );
+  if (categoryCache)
+    cacheCategories(categoryCache.filter((category) => category.id !== id));
 }
 
 export async function getStorefrontProducts() {
-  const response = await ensureOk(
-    await fetch(`${apiUrl()}/api/v1/catalog/products`, { cache: "no-store" }),
-  );
-  return ((await response.json()) as ApiProduct[]).map(toProduct);
+  if (productCache) return productCache;
+  const stored = readSessionCache<Product[]>(PRODUCT_CACHE_KEY);
+  if (stored) return cacheProducts(stored);
+  if (productRequest) return productRequest;
+  productRequest = (async () => {
+    const response = await ensureOk(
+      await fetch(`${apiUrl()}/api/v1/catalog/products`, { cache: "no-store" }),
+    );
+    return cacheProducts(
+      ((await response.json()) as ApiProduct[]).map(toProduct),
+    );
+  })().finally(() => {
+    productRequest = null;
+  });
+  return productRequest;
 }
 export async function createStorefrontOrder(input: {
   customerName: string;
@@ -214,7 +291,9 @@ export async function getAdminProducts(baseUrl: string, token: string) {
       cache: "no-store",
     }),
   );
-  return ((await response.json()) as ApiProduct[]).map(toProduct);
+  return cacheProducts(
+    ((await response.json()) as ApiProduct[]).map(toProduct),
+  );
 }
 type ProductInput = {
   name: string;
@@ -274,7 +353,9 @@ export async function createAdminProduct(
       body: JSON.stringify(productBody(input)),
     }),
   );
-  return toProduct((await response.json()) as ApiProduct);
+  const created = toProduct((await response.json()) as ApiProduct);
+  cacheProducts([created, ...(productCache ?? [])]);
+  return created;
 }
 export async function updateAdminProduct(
   baseUrl: string,
@@ -292,7 +373,14 @@ export async function updateAdminProduct(
       body: JSON.stringify(productBody(input)),
     }),
   );
-  return toProduct((await response.json()) as ApiProduct);
+  const updated = toProduct((await response.json()) as ApiProduct);
+  if (productCache)
+    cacheProducts(
+      productCache.map((product) =>
+        product.id === updated.id ? updated : product,
+      ),
+    );
+  return updated;
 }
 export async function updateAdminProductStatus(
   baseUrl: string,
@@ -310,7 +398,14 @@ export async function updateAdminProductStatus(
       body: JSON.stringify({ active }),
     }),
   );
-  return toProduct((await response.json()) as ApiProduct);
+  const updated = toProduct((await response.json()) as ApiProduct);
+  if (productCache)
+    cacheProducts(
+      productCache.map((product) =>
+        product.id === updated.id ? updated : product,
+      ),
+    );
+  return updated;
 }
 export async function deleteAdminProduct(
   baseUrl: string,
@@ -323,6 +418,8 @@ export async function deleteAdminProduct(
       headers: { Authorization: `Bearer ${token}` },
     }),
   );
+  if (productCache)
+    cacheProducts(productCache.filter((product) => product.id !== id));
 }
 export async function uploadAdminProductMedia(
   baseUrl: string,
