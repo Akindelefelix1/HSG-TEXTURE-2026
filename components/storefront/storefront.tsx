@@ -33,13 +33,18 @@ import {
   X,
 } from "lucide-react";
 import {
-  STORY_SETTINGS_KEY,
   defaultSiteSettings,
   defaultStorySettings,
   type CustomerFeedback,
   type SiteSettings,
   type StorySettings,
 } from "@/lib/catalog-admin";
+import {
+  getCachedStorySettings,
+  getStorySettings,
+  preloadStoryMedia,
+  STORY_CACHE_KEY,
+} from "@/lib/story-settings-api";
 import {
   getCachedSiteSettings,
   getSiteSettings,
@@ -1727,21 +1732,35 @@ function ProductDetail({
 function About() {
   const [story, setStory] = useState<StorySettings>(defaultStorySettings);
   useEffect(() => {
-    const refresh = () => {
+    let mounted = true;
+    let latest = 0;
+    const commit = async (next: StorySettings, request: number) => {
+      const ready = await preloadStoryMedia(next);
+      if (mounted && ready && request === latest) setStory(next);
+    };
+    const refresh = async () => {
+      const request = ++latest;
       try {
-        const saved = window.localStorage.getItem(STORY_SETTINGS_KEY);
-        setStory(
-          saved ? (JSON.parse(saved) as StorySettings) : defaultStorySettings,
-        );
-      } catch {
-        setStory(defaultStorySettings);
+        await commit(await getStorySettings(), request);
+      } catch {}
+    };
+    const initialize = async () => {
+      const request = ++latest;
+      await commit(getCachedStorySettings(), request);
+      if (mounted && request === latest) await refresh();
+    };
+    const syncCached = (event: StorageEvent) => {
+      if (event.key === STORY_CACHE_KEY) {
+        const request = ++latest;
+        void commit(getCachedStorySettings(), request);
       }
     };
-    refresh();
-    window.addEventListener("storage", refresh);
+    void initialize();
+    window.addEventListener("storage", syncCached);
     window.addEventListener("hsg-story-updated", refresh);
     return () => {
-      window.removeEventListener("storage", refresh);
+      mounted = false;
+      window.removeEventListener("storage", syncCached);
       window.removeEventListener("hsg-story-updated", refresh);
     };
   }, []);
@@ -1758,6 +1777,7 @@ function About() {
             <AboutMedia
               key={index}
               id={story.collageMediaIds[index]}
+              url={story.collageMedia?.[index]?.url}
               alt={`HSG Texture story ${index + 1}`}
             />
           ))}
@@ -1793,9 +1813,13 @@ function About() {
             {visibleFeedback.map((item) => (
               <article
                 key={item.id}
-                className={item.mediaId ? "has-media" : "text-only"}
+                className={
+                  item.mediaId || item.mediaUrl ? "has-media" : "text-only"
+                }
               >
-                {item.mediaId && <AboutFeedbackMedia feedback={item} />}
+                {(item.mediaId || item.mediaUrl) && (
+                  <AboutFeedbackMedia feedback={item} />
+                )}
                 <div>
                   <span className="customer-quote">“</span>
                   <blockquote>{item.quote}</blockquote>
@@ -1815,12 +1839,21 @@ function About() {
   );
 }
 
-function AboutMedia({ id, alt }: { id?: string; alt: string }) {
-  const [url, setUrl] = useState("");
+function AboutMedia({
+  id,
+  url: remoteUrl,
+  alt,
+}: {
+  id?: string;
+  url?: string;
+  alt: string;
+}) {
+  const [url, setUrl] = useState(remoteUrl ?? "");
   useEffect(() => {
     let active = true;
     let created = "";
-    if (id)
+    if (remoteUrl) queueMicrotask(() => active && setUrl(remoteUrl));
+    else if (id)
       void getProductMedia(id).then((blob) => {
         if (blob && active) {
           created = URL.createObjectURL(blob);
@@ -1835,7 +1868,7 @@ function AboutMedia({ id, alt }: { id?: string; alt: string }) {
       active = false;
       if (created) URL.revokeObjectURL(created);
     };
-  }, [id]);
+  }, [id, remoteUrl]);
   return url ? (
     <span
       style={{ backgroundImage: `url(${url})` }}
@@ -1847,11 +1880,13 @@ function AboutMedia({ id, alt }: { id?: string; alt: string }) {
   );
 }
 function AboutFeedbackMedia({ feedback }: { feedback: CustomerFeedback }) {
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(feedback.mediaUrl ?? "");
   useEffect(() => {
     let active = true;
     let created = "";
-    if (feedback.mediaId)
+    if (feedback.mediaUrl)
+      queueMicrotask(() => active && setUrl(feedback.mediaUrl ?? ""));
+    else if (feedback.mediaId)
       void getProductMedia(feedback.mediaId).then((blob) => {
         if (blob && active) {
           created = URL.createObjectURL(blob);
@@ -1862,7 +1897,7 @@ function AboutFeedbackMedia({ feedback }: { feedback: CustomerFeedback }) {
       active = false;
       if (created) URL.revokeObjectURL(created);
     };
-  }, [feedback.mediaId]);
+  }, [feedback.mediaId, feedback.mediaUrl]);
   if (!url) return <div className="customer-media-placeholder" />;
   return feedback.mediaType === "video" ? (
     <video src={url} controls playsInline preload="metadata" />

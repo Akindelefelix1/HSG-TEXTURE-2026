@@ -70,9 +70,17 @@ export type CustomerFeedback = {
   customerName: string;
   quote: string;
   mediaId?: string;
+  mediaKey?: string;
+  mediaUrl?: string;
   mediaName?: string;
   mediaType?: "image" | "video";
   active: boolean;
+};
+export type StoryMedia = {
+  key: string;
+  url?: string;
+  name: string;
+  type: "image" | "video";
 };
 export type StorySettings = {
   eyebrow: string;
@@ -83,6 +91,7 @@ export type StorySettings = {
   valuesEyebrow: string;
   values: StoryValue[];
   collageMediaIds: string[];
+  collageMedia?: Array<StoryMedia | null>;
   feedbackEyebrow: string;
   feedbackTitle: string;
   feedbackIntro: string;

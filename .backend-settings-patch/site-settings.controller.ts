@@ -7,7 +7,10 @@ import {
   Roles,
   RolesGuard,
 } from "../../common/auth.js";
-import { UpdateSiteSettingsDto } from "./site-settings.dto.js";
+import {
+  UpdateSiteSettingsDto,
+  UpdateStorySettingsDto,
+} from "./site-settings.dto.js";
 import { SiteSettingsService } from "./site-settings.service.js";
 
 @ApiTags("settings")
@@ -38,5 +41,29 @@ export class AdminSiteSettingsController {
   @Put()
   update(@Body() dto: UpdateSiteSettingsDto) {
     return this.settings.update(dto);
+  }
+}
+
+@ApiTags("story")
+@Controller("story")
+export class StoryController {
+  constructor(private readonly settings: SiteSettingsService) {}
+  @Public() @Get() get() {
+    return this.settings.getStory();
+  }
+}
+
+@ApiTags("admin story")
+@ApiBearerAuth()
+@Roles(Role.ADMIN)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Controller("admin/story")
+export class AdminStoryController {
+  constructor(private readonly settings: SiteSettingsService) {}
+  @Get() get() {
+    return this.settings.getStory();
+  }
+  @Put() update(@Body() dto: UpdateStorySettingsDto) {
+    return this.settings.updateStory(dto.story);
   }
 }

@@ -26,6 +26,9 @@ export class SiteSettings {
   @Column({ type: "varchar", nullable: true })
   heroImageKey?: string | null;
 
+  @Column({ type: "jsonb", nullable: true })
+  story?: Record<string, unknown> | null;
+
   @UpdateDateColumn()
   updatedAt!: Date;
 }

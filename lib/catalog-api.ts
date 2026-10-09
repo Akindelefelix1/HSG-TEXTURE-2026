@@ -192,6 +192,7 @@ export async function createAdminCategory(
     section: "fabric" | "accessories";
   },
 ) {
+  const previous = categoryCache?.find((category) => category.id === id);
   const slug = input.name
     .toLowerCase()
     .trim()
@@ -215,8 +216,23 @@ export async function updateAdminCategory(
   baseUrl: string,
   token: string,
   id: string,
-  patch: { active?: boolean; sortOrder?: number },
+  patch: {
+    active?: boolean;
+    sortOrder?: number;
+    name?: string;
+    description?: string;
+  },
 ) {
+  const body = patch.name
+    ? {
+        ...patch,
+        slug: patch.name
+          .toLowerCase()
+          .trim()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, ""),
+      }
+    : patch;
   const response = await ensureOk(
     await fetch(`${baseUrl}/api/v1/admin/catalog/categories/${id}`, {
       method: "PATCH",
@@ -224,7 +240,7 @@ export async function updateAdminCategory(
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(patch),
+      body: JSON.stringify(body),
     }),
   );
   const updated = toCategory((await response.json()) as ApiCategory);
@@ -234,6 +250,17 @@ export async function updateAdminCategory(
         category.id === updated.id ? updated : category,
       ),
     );
+  if (patch.name && productCache) {
+    if (previous)
+      cacheProducts(
+        productCache.map((product) =>
+          product.category === previous.name &&
+          product.section === previous.section
+            ? { ...product, category: updated.name }
+            : product,
+        ),
+      );
+  }
   return updated;
 }
 export async function deleteAdminCategory(

@@ -1,4 +1,4 @@
-import { IsOptional, IsString } from "class-validator";
+import { IsObject, IsOptional, IsString } from "class-validator";
 
 export class UpdateSiteSettingsDto {
   @IsOptional() @IsString() announcement?: string;
@@ -14,4 +14,9 @@ export class UpdateSiteSettingsDto {
   @IsOptional() @IsString() trustTwo?: string;
   @IsOptional() @IsString() imageNote?: string;
   @IsOptional() @IsString() heroImageKey?: string;
+}
+
+export class UpdateStorySettingsDto {
+  @IsObject()
+  story!: Record<string, unknown>;
 }

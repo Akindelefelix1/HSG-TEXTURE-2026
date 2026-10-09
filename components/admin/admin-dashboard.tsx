@@ -32,7 +32,6 @@ import {
   type BetterAuthVanillaAdapterInstance,
 } from "@neondatabase/neon-js/auth/vanilla/adapters";
 import {
-  STORY_SETTINGS_KEY,
   defaultSiteSettings,
   defaultStorySettings,
   makeAdminId,
@@ -42,6 +41,10 @@ import {
   type StorySettings,
 } from "@/lib/catalog-admin";
 import {
+  getAdminStorySettings,
+  updateAdminStorySettings,
+} from "@/lib/story-settings-api";
+import {
   getAdminSiteSettings,
   getCachedSiteSettings,
   updateAdminSiteSettings,
@@ -49,11 +52,7 @@ import {
 import { formatNaira } from "@/lib/storefront";
 import type { Category, Product, ProductMedia } from "@/types/storefront";
 import { AppDialog } from "@/components/ui/app-dialog";
-import {
-  deleteProductMedia,
-  getProductMedia,
-  saveProductMedia,
-} from "@/lib/product-media";
+import { getProductMedia } from "@/lib/product-media";
 import {
   createAdminProduct,
   createAdminCategory,
@@ -204,15 +203,6 @@ async function getAdminRequestContext() {
   return { apiUrl, token: data.token };
 }
 
-function readLocal<T>(key: string, fallback: T): T {
-  try {
-    const value = window.localStorage.getItem(key);
-    return value ? (JSON.parse(value) as T) : fallback;
-  } catch {
-    return fallback;
-  }
-}
-
 export function AdminDashboard() {
   const [ready, setReady] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
@@ -240,6 +230,9 @@ export function AdminDashboard() {
   const [mediaError, setMediaError] = useState("");
   const [categoryName, setCategoryName] = useState("");
   const [categoryNote, setCategoryNote] = useState("");
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(
+    null,
+  );
   const [notice, setNotice] = useState("");
   const [siteSettings, setSiteSettings] =
     useState<SiteSettings>(defaultSiteSettings);
@@ -254,7 +247,7 @@ export function AdminDashboard() {
       const cachedSettings = getCachedSiteSettings();
       setSiteSettings(cachedSettings);
       setHeroPreview(cachedSettings.heroImageUrl ?? "");
-      setStorySettings(readLocal(STORY_SETTINGS_KEY, defaultStorySettings));
+      setStorySettings(defaultStorySettings);
     });
     let mounted = true;
     const restoreAdminSession = async () => {
@@ -267,16 +260,18 @@ export function AdminDashboard() {
           );
         if (!data?.token) return;
         const user = await verifyAdminRole(apiUrl, data.token);
-        const [serverCategories, serverProducts, serverSettings] =
+        const [serverCategories, serverProducts, serverSettings, serverStory] =
           await Promise.all([
             getAdminCategories(apiUrl, data.token),
             getAdminProducts(apiUrl, data.token),
             getAdminSiteSettings(apiUrl, data.token),
+            getAdminStorySettings(apiUrl, data.token),
           ]);
         if (mounted) {
           setCategories(serverCategories);
           setProducts(serverProducts);
           setSiteSettings(serverSettings);
+          setStorySettings(serverStory);
           setHeroPreview(serverSettings.heroImageUrl ?? "");
           setAdminUser(user);
           setAuthenticated(true);
@@ -689,17 +684,53 @@ export function AdminDashboard() {
   };
   const addCategory = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    void runAdminAction("Creating category", async () => {
+    void runAdminAction(
+      editingCategoryId ? "Saving category" : "Creating category",
+      async () => {
       const name = categoryName.trim();
       if (
         !name ||
         sectionCategories.some(
-          (category) => category.name.toLowerCase() === name.toLowerCase(),
+          (category) =>
+            category.id !== editingCategoryId &&
+            category.name.toLowerCase() === name.toLowerCase(),
         )
       )
         return;
       try {
         const { apiUrl, token } = await getAdminRequestContext();
+        if (editingCategoryId) {
+          const original = categories.find(
+            (category) => category.id === editingCategoryId,
+          );
+          if (!original) return;
+          const updated = await updateAdminCategory(
+            apiUrl,
+            token,
+            editingCategoryId,
+            { name, description: categoryNote.trim() },
+          );
+          publishCategories(
+            categories.map((category) =>
+              category.id === updated.id ? updated : category,
+            ),
+          );
+          if (original.name !== updated.name)
+            publishProducts(
+              products.map((product) =>
+                product.category === original.name &&
+                (product.section ?? "fabric") ===
+                  (original.section ?? "fabric")
+                  ? { ...product, category: updated.name }
+                  : product,
+              ),
+            );
+          setEditingCategoryId(null);
+          setCategoryName("");
+          setCategoryNote("");
+          flash("Category updated.");
+          return;
+        }
         const created = await createAdminCategory(apiUrl, token, {
           name,
           description: categoryNote.trim(),
@@ -723,7 +754,19 @@ export function AdminDashboard() {
           tone: "danger",
         });
       }
-    });
+      },
+    );
+  };
+  const editCategory = (category: Category) => {
+    if (!category.id) return;
+    setEditingCategoryId(category.id);
+    setCategoryName(category.name);
+    setCategoryNote(category.note ?? "");
+  };
+  const cancelCategoryEdit = () => {
+    setEditingCategoryId(null);
+    setCategoryName("");
+    setCategoryNote("");
   };
   const toggleCategory = (id: string | undefined) => {
     void runAdminAction("Updating category", async () => {
@@ -1864,15 +1907,19 @@ function StoryEditor({
   const [customerName, setCustomerName] = useState("");
   const [quote, setQuote] = useState("");
   const [feedbackFile, setFeedbackFile] = useState<File | null>(null);
-  const persist = (next: StorySettings) => {
-    onChange(next);
-    window.localStorage.setItem(STORY_SETTINGS_KEY, JSON.stringify(next));
-    window.dispatchEvent(new Event("hsg-story-updated"));
+  const persist = async (next: StorySettings) => {
+    const { auth, apiUrl } = getAdminAuthServices();
+    const { data, error } = await auth.token();
+    if (error || !data?.token)
+      throw new Error(error?.message ?? "Your admin session has expired.");
+    const updated = await updateAdminStorySettings(apiUrl, data.token, next);
+    onChange(updated);
+    return updated;
   };
   const saveCopy = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    void runAction("Saving story changes", () => {
-      persist(settings);
+    void runAction("Saving story changes", async () => {
+      await persist(settings);
       onSaved();
     });
   };
@@ -1890,12 +1937,24 @@ function StoryEditor({
   const uploadCollage = async (index: number, file?: File) => {
     if (!file || !file.type.startsWith("image/")) return;
     await runAction("Uploading story image", async () => {
-      const previous = settings.collageMediaIds[index];
-      const id = previous || makeAdminId("story-collage");
-      await saveProductMedia(id, file);
-      const ids = [...settings.collageMediaIds];
-      ids[index] = id;
-      persist({ ...settings, collageMediaIds: ids });
+      const { auth, apiUrl } = getAdminAuthServices();
+      const { data, error } = await auth.token();
+      if (error || !data?.token)
+        throw new Error(error?.message ?? "Your admin session has expired.");
+      const media = await uploadAdminProductMedia(
+        apiUrl,
+        data.token,
+        file,
+        `story collage ${index + 1}`,
+      );
+      const collageMedia = [...(settings.collageMedia ?? [])];
+      collageMedia[index] = {
+        key: media.key ?? media.id,
+        url: media.url,
+        name: media.name,
+        type: media.type,
+      };
+      await persist({ ...settings, collageMedia });
       onSaved();
     });
   };
@@ -1905,24 +1964,42 @@ function StoryEditor({
     const form = event.currentTarget;
     await runAction("Publishing customer feedback", async () => {
       let mediaId: string | undefined;
+      let mediaKey: string | undefined;
+      let mediaUrl: string | undefined;
       let mediaType: "image" | "video" | undefined;
       let mediaName: string | undefined;
       if (feedbackFile) {
-        mediaId = makeAdminId("feedback-media");
         mediaType = feedbackFile.type.startsWith("video/") ? "video" : "image";
         mediaName = feedbackFile.name;
-        await saveProductMedia(mediaId, feedbackFile);
+        const { auth, apiUrl } = getAdminAuthServices();
+        const { data, error } = await auth.token();
+        if (error || !data?.token)
+          throw new Error(error?.message ?? "Your admin session has expired.");
+        const media = await uploadAdminProductMedia(
+          apiUrl,
+          data.token,
+          feedbackFile,
+          `customer feedback ${customerName}`,
+        );
+        mediaId = undefined;
+        mediaKey = media.key ?? media.id;
+        mediaUrl = media.url;
       }
       const feedback: CustomerFeedback = {
         id: makeAdminId("feedback"),
         customerName: customerName.trim(),
         quote: quote.trim(),
         mediaId,
+        mediaKey,
+        mediaUrl,
         mediaType,
         mediaName,
         active: true,
       };
-      persist({ ...settings, feedback: [feedback, ...settings.feedback] });
+      await persist({
+        ...settings,
+        feedback: [feedback, ...settings.feedback],
+      });
       setCustomerName("");
       setQuote("");
       setFeedbackFile(null);
@@ -1931,16 +2008,34 @@ function StoryEditor({
     });
   };
   const updateFeedback = (id: string, patch: Partial<CustomerFeedback>) =>
-    persist({
+    onChange({
       ...settings,
       feedback: settings.feedback.map((item) =>
         item.id === id ? { ...item, ...patch } : item,
       ),
     });
+  const saveFeedback = () => {
+    void runAction("Updating customer feedback", async () => {
+      await persist(settings);
+      onSaved();
+    });
+  };
+  const toggleFeedback = (item: CustomerFeedback) => {
+    void runAction("Updating customer feedback", async () => {
+      await persist({
+        ...settings,
+        feedback: settings.feedback.map((feedback) =>
+          feedback.id === item.id
+            ? { ...feedback, active: !feedback.active }
+            : feedback,
+        ),
+      });
+      onSaved();
+    });
+  };
   const removeFeedback = (item: CustomerFeedback) => {
     void runAction("Removing customer feedback", async () => {
-      if (item.mediaId) await deleteProductMedia(item.mediaId);
-      persist({
+      await persist({
         ...settings,
         feedback: settings.feedback.filter(
           (feedback) => feedback.id !== item.id,
@@ -2152,11 +2247,13 @@ function StoryEditor({
                 <label key={index}>
                   <StoryMediaPreview
                     id={settings.collageMediaIds[index]}
+                    url={settings.collageMedia?.[index]?.url}
                     fallback={`Image ${index + 1}`}
                   />
                   <span>
                     <ImagePlus size={16} />{" "}
-                    {settings.collageMediaIds[index]
+                    {settings.collageMedia?.[index] ||
+                    settings.collageMediaIds[index]
                       ? "Replace image"
                       : "Upload image"}
                   </span>
@@ -2304,6 +2401,7 @@ function StoryEditor({
                   <article key={item.id}>
                     <StoryMediaPreview
                       id={item.mediaId}
+                      url={item.mediaUrl}
                       type={item.mediaType}
                       fallback="Text review"
                     />
@@ -2329,13 +2427,13 @@ function StoryEditor({
                     </div>
                     <div>
                       <button
-                        onClick={() =>
-                          void runAction("Updating customer feedback", () =>
-                            updateFeedback(item.id, {
-                              active: !item.active,
-                            }),
-                          )
-                        }
+                        onClick={saveFeedback}
+                        disabled={Boolean(activeAction)}
+                      >
+                        <Check size={15} /> Save
+                      </button>
+                      <button
+                        onClick={() => toggleFeedback(item)}
                         disabled={Boolean(activeAction)}
                       >
                         {activeAction === "Updating customer feedback" ? (
@@ -2376,18 +2474,21 @@ function StoryEditor({
 
 function StoryMediaPreview({
   id,
+  url: remoteUrl,
   type,
   fallback,
 }: {
   id?: string;
+  url?: string;
   type?: "image" | "video";
   fallback: string;
 }) {
-  const [url, setUrl] = useState("");
+  const [url, setUrl] = useState(remoteUrl ?? "");
   useEffect(() => {
     let active = true;
     let created = "";
-    if (id)
+    if (remoteUrl) queueMicrotask(() => active && setUrl(remoteUrl));
+    else if (id)
       void getProductMedia(id).then((blob) => {
         if (blob && active) {
           created = URL.createObjectURL(blob);
@@ -2402,7 +2503,7 @@ function StoryMediaPreview({
       active = false;
       if (created) URL.revokeObjectURL(created);
     };
-  }, [id]);
+  }, [id, remoteUrl]);
   if (!url)
     return (
       <span className="admin-story-media-fallback">
