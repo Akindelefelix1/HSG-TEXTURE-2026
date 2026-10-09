@@ -203,13 +203,13 @@ const productBody = (input: ProductInput) => ({
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, ""),
   price: input.price,
-  description: input.description,
+  description: input.description ?? "",
   color: input.color,
   texture: input.texture,
-  badge: input.badge,
+  badge: input.badge ?? null,
   active: input.active,
   categoryId: input.categoryId,
-  imageUrl: input.media[0]?.url,
+  imageUrl: input.media[0]?.url ?? null,
   gallery: input.media.map((media) => ({
     key: media.key ?? media.id,
     url: media.url,

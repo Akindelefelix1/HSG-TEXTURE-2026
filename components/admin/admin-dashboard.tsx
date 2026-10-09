@@ -234,14 +234,11 @@ export function AdminDashboard() {
 
   useEffect(() => {
     migrateAdminCatalog();
-    setProducts([]);
-    setCategories([]);
     const settings = migrateSiteSettings(
       readLocal(SITE_SETTINGS_KEY, defaultSiteSettings),
     );
     window.localStorage.setItem(SITE_SETTINGS_KEY, JSON.stringify(settings));
-    setSiteSettings(settings);
-    setStorySettings(readLocal(STORY_SETTINGS_KEY, defaultStorySettings));
+    queueMicrotask(()=>{setSiteSettings(settings);setStorySettings(readLocal(STORY_SETTINGS_KEY,defaultStorySettings))});
     if (settings.heroImageId)
       void getProductMedia(settings.heroImageId).then((blob) => {
         if (blob) setHeroPreview(URL.createObjectURL(blob));
@@ -336,7 +333,9 @@ export function AdminDashboard() {
       await action();
     } catch (cause) {
       setActionError(
-        cause instanceof Error ? cause.message : "The action could not be completed.",
+        cause instanceof Error
+          ? cause.message
+          : "The action could not be completed.",
       );
     } finally {
       actionInProgress.current = false;
@@ -525,67 +524,71 @@ export function AdminDashboard() {
   };
   const saveProduct = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    void runAdminAction(editingProduct ? "Saving product" : "Creating product", async () => {
-      const name = draft.name.trim();
-      const price = Number(draft.price);
-      const category = categories.find(
-        (item) =>
-          item.name === draft.category &&
-          (item.section ?? "fabric") === draft.section,
-      );
-      if (!name || !category?.id || !Number.isFinite(price) || price <= 0) return;
-      try {
-        const { apiUrl, token } = await getAdminRequestContext();
-        const orderedDrafts = [...mediaDrafts].sort((a, b) =>
-          a.id === coverMediaId ? -1 : b.id === coverMediaId ? 1 : 0,
+    void runAdminAction(
+      editingProduct ? "Saving product" : "Creating product",
+      async () => {
+        const name = draft.name.trim();
+        const price = Number(draft.price);
+        const category = categories.find(
+          (item) =>
+            item.name === draft.category &&
+            (item.section ?? "fabric") === draft.section,
         );
-        const orderedMedia = await Promise.all(
-          orderedDrafts.map(async (media) =>
-            media.file
-              ? uploadAdminProductMedia(apiUrl, token, media.file, name)
-              : media,
-          ),
-        );
-        const input = {
-          name,
-          price,
-          categoryId: category.id,
-          description: draft.description.trim() || undefined,
-          color: draft.color,
-          texture: draft.texture.trim() || "woven",
-          badge: draft.badge.trim() || undefined,
-          active: draft.active,
-          media: orderedMedia,
-        };
-        const saved = editingProduct
-          ? await updateAdminProduct(apiUrl, token, editingProduct, input)
-          : await createAdminProduct(apiUrl, token, input);
-        await Promise.all(
-          removedMediaIds.map((key) =>
-            deleteAdminProductMedia(apiUrl, token, key),
-          ),
-        );
-        publishProducts(
-          editingProduct
-            ? products.map((product) =>
-                product.id === editingProduct ? saved : product,
-              )
-            : [saved, ...products],
-        );
-        closeProductModal();
-        flash(
-          editingProduct
-            ? "Product updated successfully."
-            : "Product created successfully.",
-        );
-      } catch (cause) {
-        setMediaError(
-          cause instanceof Error
-            ? cause.message
-            : "The product could not be saved. Please try again.",
-        );
-      }
-    });
+        if (!name || !category?.id || !Number.isFinite(price) || price <= 0)
+          return;
+        try {
+          const { apiUrl, token } = await getAdminRequestContext();
+          const orderedDrafts = [...mediaDrafts].sort((a, b) =>
+            a.id === coverMediaId ? -1 : b.id === coverMediaId ? 1 : 0,
+          );
+          const orderedMedia = await Promise.all(
+            orderedDrafts.map(async (media) =>
+              media.file
+                ? uploadAdminProductMedia(apiUrl, token, media.file, name)
+                : media,
+            ),
+          );
+          const input = {
+            name,
+            price,
+            categoryId: category.id,
+            description: draft.description.trim() || undefined,
+            color: draft.color,
+            texture: draft.texture.trim() || "woven",
+            badge: draft.badge.trim() || undefined,
+            active: draft.active,
+            media: orderedMedia,
+          };
+          const saved = editingProduct
+            ? await updateAdminProduct(apiUrl, token, editingProduct, input)
+            : await createAdminProduct(apiUrl, token, input);
+          await Promise.all(
+            removedMediaIds.map((key) =>
+              deleteAdminProductMedia(apiUrl, token, key),
+            ),
+          );
+          publishProducts(
+            editingProduct
+              ? products.map((product) =>
+                  product.id === editingProduct ? saved : product,
+                )
+              : [saved, ...products],
+          );
+          closeProductModal();
+          flash(
+            editingProduct
+              ? "Product updated successfully."
+              : "Product created successfully.",
+          );
+        } catch (cause) {
+          setMediaError(
+            cause instanceof Error
+              ? cause.message
+              : "The product could not be saved. Please try again.",
+          );
+        }
+      },
+    );
   };
   const removeProduct = (product: Product) =>
     setDialog({
@@ -934,9 +937,7 @@ export function AdminDashboard() {
                   ) : (
                     <LogOut size={16} />
                   )}{" "}
-                  {activeAction === "Signing out"
-                    ? "Signing out…"
-                    : "Sign out"}
+                  {activeAction === "Signing out" ? "Signing out…" : "Sign out"}
                 </button>
               </section>
             )}
@@ -1741,9 +1742,7 @@ function StoryEditor({
       let mediaName: string | undefined;
       if (feedbackFile) {
         mediaId = makeAdminId("feedback-media");
-        mediaType = feedbackFile.type.startsWith("video/")
-          ? "video"
-          : "image";
+        mediaType = feedbackFile.type.startsWith("video/") ? "video" : "image";
         mediaName = feedbackFile.name;
         await saveProductMedia(mediaId, feedbackFile);
       }
@@ -2106,10 +2105,7 @@ function StoryEditor({
                   }
                 />
               </label>
-              <button
-                type="submit"
-                disabled={Boolean(activeAction)}
-              >
+              <button type="submit" disabled={Boolean(activeAction)}>
                 {activeAction === "Publishing customer feedback" ? (
                   <Loader2 size={16} className="admin-activity-spinner" />
                 ) : (
@@ -2231,7 +2227,10 @@ function StoryMediaPreview({
           setUrl(created);
         }
       });
-    else setUrl("");
+    else
+      queueMicrotask(() => {
+        if (active) setUrl("");
+      });
     return () => {
       active = false;
       if (created) URL.revokeObjectURL(created);

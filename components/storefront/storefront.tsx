@@ -1073,10 +1073,6 @@ function PriceFilter({
   const rangeMax = 100000;
   const [draftMin, setDraftMin] = useState(Number(minPrice) || 0);
   const [draftMax, setDraftMax] = useState(Number(maxPrice) || rangeMax);
-  useEffect(() => {
-    setDraftMin(Number(minPrice) || 0);
-    setDraftMax(Number(maxPrice) || rangeMax);
-  }, [minPrice, maxPrice]);
   const minPercent = (draftMin / rangeMax) * 100;
   const maxPercent = (draftMax / rangeMax) * 100;
   const apply = () => {
@@ -1197,7 +1193,6 @@ function Listing({
   const [fabricMaxPrice, setFabricMaxPrice] = useState("");
   const [accessoryMinPrice, setAccessoryMinPrice] = useState("");
   const [accessoryMaxPrice, setAccessoryMaxPrice] = useState("");
-  useEffect(() => setFilter(requestedCategory), [requestedCategory]);
   const fabricProducts = useMemo(
     () =>
       products.filter((product) => (product.section ?? "fabric") === "fabric"),
@@ -1735,7 +1730,10 @@ function AboutMedia({ id, alt }: { id?: string; alt: string }) {
           setUrl(created);
         }
       });
-    else setUrl("");
+    else
+      queueMicrotask(() => {
+        if (active) setUrl("");
+      });
     return () => {
       active = false;
       if (created) URL.revokeObjectURL(created);
