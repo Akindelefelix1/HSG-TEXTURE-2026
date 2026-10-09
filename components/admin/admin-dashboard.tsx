@@ -29,10 +29,8 @@ import {
   type BetterAuthVanillaAdapterInstance,
 } from "@neondatabase/neon-js/auth/vanilla/adapters";
 import {
-  ADMIN_PRODUCTS_KEY,
   SITE_SETTINGS_KEY,
   STORY_SETTINGS_KEY,
-  defaultAdminProducts,
   defaultSiteSettings,
   defaultStorySettings,
   makeAdminId,
@@ -51,9 +49,16 @@ import {
   saveProductMedia,
 } from "@/lib/product-media";
 import {
+  createAdminProduct,
   createAdminCategory,
   deleteAdminCategory,
+  deleteAdminProduct,
+  deleteAdminProductMedia,
   getAdminCategories,
+  getAdminProducts,
+  updateAdminProduct,
+  updateAdminProductStatus,
+  uploadAdminProductMedia,
   updateAdminCategory,
 } from "@/lib/catalog-api";
 
@@ -202,7 +207,7 @@ export function AdminDashboard() {
   const [tab, setTab] = useState<AdminTab>("dashboard");
   const [catalogSection, setCatalogSection] =
     useState<CatalogSection>("fabric");
-  const [products, setProducts] = useState<Product[]>(defaultAdminProducts);
+  const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [search, setSearch] = useState("");
   const [productModal, setProductModal] = useState(false);
@@ -225,7 +230,7 @@ export function AdminDashboard() {
 
   useEffect(() => {
     migrateAdminCatalog();
-    setProducts(readLocal(ADMIN_PRODUCTS_KEY, defaultAdminProducts));
+    setProducts([]);
     setCategories([]);
     const settings = migrateSiteSettings(
       readLocal(SITE_SETTINGS_KEY, defaultSiteSettings),
@@ -249,8 +254,10 @@ export function AdminDashboard() {
         if (!data?.token) return;
         const user = await verifyAdminRole(apiUrl, data.token);
         const serverCategories = await getAdminCategories(apiUrl, data.token);
+        const serverProducts = await getAdminProducts(apiUrl, data.token);
         if (mounted) {
           setCategories(serverCategories);
+          setProducts(serverProducts);
           setAdminUser(user);
           setAuthenticated(true);
         }
@@ -301,10 +308,9 @@ export function AdminDashboard() {
     return () => cancelAnimationFrame(frame);
   }, [productModal, mediaDrafts, coverMediaId]);
 
-  const persistProducts = (next: Product[]) => {
+  const publishProducts = (next: Product[]) => {
     setProducts(next);
-    window.localStorage.setItem(ADMIN_PRODUCTS_KEY, JSON.stringify(next));
-    window.dispatchEvent(new Event("hsg-catalog-updated"));
+    window.dispatchEvent(new Event("hsg-products-updated"));
   };
   const publishCategories = (next: Category[]) => {
     setCategories(next);
@@ -343,7 +349,12 @@ export function AdminDashboard() {
         apiUrl,
         tokenResult.data.token,
       );
+      const serverProducts = await getAdminProducts(
+        apiUrl,
+        tokenResult.data.token,
+      );
       setCategories(serverCategories);
+      setProducts(serverProducts);
       setAdminUser(user);
       setAuthenticated(true);
     } catch (cause) {
@@ -424,6 +435,7 @@ export function AdminDashboard() {
     );
     const existing = await Promise.all(
       (product?.media ?? []).map(async (media) => {
+        if (media.url) return { ...media, url: media.url };
         const blob = await getProductMedia(media.id);
         return blob ? { ...media, url: URL.createObjectURL(blob) } : null;
       }),
@@ -445,10 +457,20 @@ export function AdminDashboard() {
   const addMedia = (files: FileList | null) => {
     if (!files) return;
     setMediaError("");
-    const supported = Array.from(files).filter(
-      (file) =>
-        file.type.startsWith("image/") || file.type.startsWith("video/"),
+    const supportedTypes = new Set([
+      "image/jpeg",
+      "image/png",
+      "image/webp",
+      "video/mp4",
+      "video/webm",
+    ]);
+    const supported = Array.from(files).filter((file) =>
+      supportedTypes.has(file.type),
     );
+    if (supported.length !== files.length) {
+      setMediaError("Use JPG, PNG, WebP, MP4 or WebM files only.");
+      return;
+    }
     if (mediaDrafts.length + supported.length > 8) {
       setMediaError("You can add up to 8 images and videos per product.");
       return;
@@ -478,43 +500,51 @@ export function AdminDashboard() {
   };
   const saveProduct = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const orderedMedia = [...mediaDrafts].sort((a, b) =>
-      a.id === coverMediaId ? -1 : b.id === coverMediaId ? 1 : 0,
+    const name = draft.name.trim();
+    const price = Number(draft.price);
+    const category = categories.find(
+      (item) =>
+        item.name === draft.category &&
+        (item.section ?? "fabric") === draft.section,
     );
-    const value: Product = {
-      id: editingProduct ?? makeAdminId("product"),
-      section: draft.section,
-      name: draft.name.trim(),
-      category: draft.category,
-      price: Number(draft.price),
-      color: draft.color,
-      texture: draft.texture.trim() || "woven",
-      description: draft.description.trim() || undefined,
-      media: orderedMedia.map(({ id, name, type }) => ({ id, name, type })),
-      coverMediaId: coverMediaId || undefined,
-      badge: draft.badge.trim() || undefined,
-      active: draft.active,
-    };
-    if (
-      !value.name ||
-      !value.category ||
-      !Number.isFinite(value.price) ||
-      value.price <= 0
-    )
-      return;
+    if (!name || !category?.id || !Number.isFinite(price) || price <= 0) return;
     try {
-      await Promise.all(
-        mediaDrafts
-          .filter((media) => media.file)
-          .map((media) => saveProductMedia(media.id, media.file as File)),
+      const { apiUrl, token } = await getAdminRequestContext();
+      const orderedDrafts = [...mediaDrafts].sort((a, b) =>
+        a.id === coverMediaId ? -1 : b.id === coverMediaId ? 1 : 0,
       );
-      await Promise.all(removedMediaIds.map(deleteProductMedia));
-      persistProducts(
+      const orderedMedia = await Promise.all(
+        orderedDrafts.map(async (media) =>
+          media.file
+            ? uploadAdminProductMedia(apiUrl, token, media.file, name)
+            : media,
+        ),
+      );
+      const input = {
+        name,
+        price,
+        categoryId: category.id,
+        description: draft.description.trim() || undefined,
+        color: draft.color,
+        texture: draft.texture.trim() || "woven",
+        badge: draft.badge.trim() || undefined,
+        active: draft.active,
+        media: orderedMedia,
+      };
+      const saved = editingProduct
+        ? await updateAdminProduct(apiUrl, token, editingProduct, input)
+        : await createAdminProduct(apiUrl, token, input);
+      await Promise.all(
+        removedMediaIds.map((key) =>
+          deleteAdminProductMedia(apiUrl, token, key),
+        ),
+      );
+      publishProducts(
         editingProduct
           ? products.map((product) =>
-              product.id === editingProduct ? value : product,
+              product.id === editingProduct ? saved : product,
             )
-          : [value, ...products],
+          : [saved, ...products],
       );
       closeProductModal();
       flash(
@@ -522,8 +552,12 @@ export function AdminDashboard() {
           ? "Product updated successfully."
           : "Product created successfully.",
       );
-    } catch {
-      setMediaError("The media could not be saved. Please try again.");
+    } catch (cause) {
+      setMediaError(
+        cause instanceof Error
+          ? cause.message
+          : "The product could not be saved. Please try again.",
+      );
     }
   };
   const removeProduct = (product: Product) =>
@@ -533,22 +567,64 @@ export function AdminDashboard() {
       confirmLabel: "Delete product",
       tone: "danger",
       onConfirm: () => {
-        void Promise.all(
-          (product.media ?? []).map((media) => deleteProductMedia(media.id)),
-        );
-        persistProducts(products.filter((item) => item.id !== product.id));
-        flash("Product deleted.");
+        void (async () => {
+          if (!product.id) return;
+          try {
+            const { apiUrl, token } = await getAdminRequestContext();
+            await deleteAdminProduct(apiUrl, token, product.id);
+            await Promise.all(
+              (product.media ?? [])
+                .filter((media) => media.key)
+                .map((media) =>
+                  deleteAdminProductMedia(apiUrl, token, media.key as string),
+                ),
+            );
+            publishProducts(products.filter((item) => item.id !== product.id));
+            flash("Product deleted.");
+          } catch (cause) {
+            setDialog({
+              title: "Product was not deleted",
+              description:
+                cause instanceof Error
+                  ? cause.message
+                  : "The product API request failed.",
+              confirmLabel: "Close",
+              cancelLabel: null,
+              tone: "danger",
+            });
+          }
+        })();
       },
     });
   const toggleProduct = (id: string | undefined) => {
-    persistProducts(
-      products.map((product) =>
-        product.id === id
-          ? { ...product, active: product.active === false }
-          : product,
-      ),
-    );
-    flash("Product status updated.");
+    void (async () => {
+      const product = products.find((item) => item.id === id);
+      if (!product?.id) return;
+      try {
+        const { apiUrl, token } = await getAdminRequestContext();
+        const updated = await updateAdminProductStatus(
+          apiUrl,
+          token,
+          product.id,
+          product.active === false,
+        );
+        publishProducts(
+          products.map((item) => (item.id === updated.id ? updated : item)),
+        );
+        flash("Product status updated.");
+      } catch (cause) {
+        setDialog({
+          title: "Product was not updated",
+          description:
+            cause instanceof Error
+              ? cause.message
+              : "The product API request failed.",
+          confirmLabel: "Close",
+          cancelLabel: null,
+          tone: "danger",
+        });
+      }
+    })();
   };
   const addCategory = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -661,15 +737,11 @@ export function AdminDashboard() {
   };
   const resetCatalog = () =>
     setDialog({
-      title: "Restore the original catalogue?",
+      title: "Live catalogue",
       description:
-        "All locally managed products will be replaced by the original catalogue. Server-managed categories are not changed.",
-      confirmLabel: "Restore catalogue",
-      tone: "danger",
-      onConfirm: () => {
-        persistProducts(defaultAdminProducts);
-        flash("Original product catalogue restored.");
-      },
+        "Products and categories are now managed in the live database. Create, edit, deactivate or delete individual records instead of restoring browser defaults.",
+      confirmLabel: "Understood",
+      cancelLabel: null,
     });
   const saveSiteSettings = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -2292,6 +2364,7 @@ function AdminProductMedia({ product }: { product: Product }) {
     );
     void Promise.all(
       ordered.map(async (item) => {
+        if (item.url) return { ...item, url: item.url };
         const blob = await getProductMedia(item.id);
         if (!blob) return null;
         const url = URL.createObjectURL(blob);

@@ -1,4 +1,4 @@
-import type { Category } from "@/types/storefront";
+import type { Category, Product, ProductMedia } from "@/types/storefront";
 
 const DEFAULT_API_URL = "https://hsg-be.onrender.com";
 const apiUrl = () =>
@@ -12,12 +12,57 @@ type ApiCategory = {
   section: "fabric" | "accessories";
   active: boolean;
 };
+type ApiProductMedia = {
+  key: string;
+  url: string;
+  name: string;
+  type: "image" | "video";
+};
+type ApiProduct = {
+  id: string;
+  slug: string;
+  name: string;
+  price: number;
+  description: string;
+  color: string;
+  texture: string;
+  badge?: string;
+  imageUrl?: string;
+  gallery: ApiProductMedia[];
+  active: boolean;
+  category: ApiCategory;
+};
 const toCategory = (category: ApiCategory): Category => ({
   id: category.id,
   name: category.name,
   note: category.description,
   section: category.section,
   active: category.active,
+});
+const toProduct = (product: ApiProduct): Product => ({
+  id: product.id,
+  name: product.name,
+  section: product.category.section,
+  category: product.category.name,
+  price: Number(product.price),
+  color: product.color,
+  texture: product.texture,
+  description: product.description || undefined,
+  image: product.imageUrl || undefined,
+  media: (product.gallery ?? [])
+    .filter((media): media is ApiProductMedia =>
+      Boolean(media && typeof media === "object" && media.url),
+    )
+    .map((media) => ({
+      id: media.key,
+      key: media.key,
+      url: media.url,
+      name: media.name,
+      type: media.type,
+    })),
+  coverMediaId: product.gallery?.[0]?.key,
+  badge: product.badge || undefined,
+  active: product.active,
 });
 const readError = async (response: Response) => {
   try {
@@ -102,6 +147,180 @@ export async function deleteAdminCategory(
 ) {
   await ensureOk(
     await fetch(`${baseUrl}/api/v1/admin/catalog/categories/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  );
+}
+
+export async function getStorefrontProducts() {
+  const response = await ensureOk(
+    await fetch(`${apiUrl()}/api/v1/catalog/products`, { cache: "no-store" }),
+  );
+  return ((await response.json()) as ApiProduct[]).map(toProduct);
+}
+export async function getAdminProducts(baseUrl: string, token: string) {
+  const response = await ensureOk(
+    await fetch(`${baseUrl}/api/v1/admin/catalog/products`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: "no-store",
+    }),
+  );
+  return ((await response.json()) as ApiProduct[]).map(toProduct);
+}
+type ProductInput = {
+  name: string;
+  price: number;
+  description?: string;
+  color: string;
+  texture: string;
+  badge?: string;
+  active: boolean;
+  categoryId: string;
+  media: ProductMedia[];
+};
+const productBody = (input: ProductInput) => ({
+  name: input.name,
+  slug: input.name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, ""),
+  price: input.price,
+  description: input.description,
+  color: input.color,
+  texture: input.texture,
+  badge: input.badge,
+  active: input.active,
+  categoryId: input.categoryId,
+  imageUrl: input.media[0]?.url,
+  gallery: input.media.map((media) => ({
+    key: media.key ?? media.id,
+    url: media.url,
+    name: media.name,
+    type: media.type,
+  })),
+});
+export async function createAdminProduct(
+  baseUrl: string,
+  token: string,
+  input: ProductInput,
+) {
+  const response = await ensureOk(
+    await fetch(`${baseUrl}/api/v1/admin/catalog/products`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(productBody(input)),
+    }),
+  );
+  return toProduct((await response.json()) as ApiProduct);
+}
+export async function updateAdminProduct(
+  baseUrl: string,
+  token: string,
+  id: string,
+  input: ProductInput,
+) {
+  const response = await ensureOk(
+    await fetch(`${baseUrl}/api/v1/admin/catalog/products/${id}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(productBody(input)),
+    }),
+  );
+  return toProduct((await response.json()) as ApiProduct);
+}
+export async function updateAdminProductStatus(
+  baseUrl: string,
+  token: string,
+  id: string,
+  active: boolean,
+) {
+  const response = await ensureOk(
+    await fetch(`${baseUrl}/api/v1/admin/catalog/products/${id}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ active }),
+    }),
+  );
+  return toProduct((await response.json()) as ApiProduct);
+}
+export async function deleteAdminProduct(
+  baseUrl: string,
+  token: string,
+  id: string,
+) {
+  await ensureOk(
+    await fetch(`${baseUrl}/api/v1/admin/catalog/products/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  );
+}
+export async function uploadAdminProductMedia(
+  baseUrl: string,
+  token: string,
+  file: File,
+  productName: string,
+): Promise<ProductMedia> {
+  const slug =
+    productName
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "product";
+  const safeName = file.name.toLowerCase().replace(/[^a-z0-9._-]+/g, "-");
+  const key = `products/${slug}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`;
+  const signed = await ensureOk(
+    await fetch(`${baseUrl}/api/v1/storage/upload-url`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ key, contentType: file.type }),
+    }),
+  );
+  const { url } = (await signed.json()) as { url: string };
+  await ensureOk(
+    await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": file.type },
+      body: file,
+    }),
+  );
+  const path = key.split("/").map(encodeURIComponent).join("/");
+  const read = await ensureOk(
+    await fetch(`${baseUrl}/api/v1/storage/read-url/${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  );
+  const { url: publicUrl } = (await read.json()) as { url: string };
+  return {
+    id: key,
+    key,
+    url: publicUrl,
+    name: file.name,
+    type: file.type.startsWith("video/") ? "video" : "image",
+  };
+}
+export async function deleteAdminProductMedia(
+  baseUrl: string,
+  token: string,
+  key: string,
+) {
+  const path = key.split("/").map(encodeURIComponent).join("/");
+  await ensureOk(
+    await fetch(`${baseUrl}/api/v1/storage/${path}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     }),

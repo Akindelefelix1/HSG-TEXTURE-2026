@@ -22,14 +22,10 @@ import {
 } from "lucide-react";
 import {
   ADMIN_CATEGORIES_KEY,
-  ADMIN_PRODUCTS_KEY,
   SITE_SETTINGS_KEY,
   STORY_SETTINGS_KEY,
-  defaultAdminCategories,
-  defaultAdminProducts,
   defaultSiteSettings,
   defaultStorySettings,
-  migrateAdminCatalog,
   migrateSiteSettings,
   type CustomerFeedback,
   type SiteSettings,
@@ -43,7 +39,10 @@ import {
   AccountAccess,
   AccountProfileButton,
 } from "@/components/storefront/account-access";
-import { getStorefrontCategories } from "@/lib/catalog-api";
+import {
+  getStorefrontCategories,
+  getStorefrontProducts,
+} from "@/lib/catalog-api";
 
 type CartItem = { product: Product; quantity: number };
 type FavoriteActions = {
@@ -56,8 +55,8 @@ const FavoriteContext = createContext<FavoriteActions>({
   toggle: () => undefined,
 });
 const CatalogContext = createContext<CatalogValue>({
-  products: defaultAdminProducts,
-  categories: defaultAdminCategories,
+  products: [],
+  categories: [],
 });
 const WHATSAPP_NUMBER = "2348107050824";
 const whatsappOrderUrl = (message: string) =>
@@ -339,6 +338,8 @@ function ProductMediaView({
       : (product.media?.slice(0, 1) ?? []);
     void Promise.all(
       mediaItems.map(async (media) => {
+        if (media.url)
+          return { id: media.id, url: media.url, type: media.type };
         const blob = await getProductMedia(media.id);
         if (!blob) return null;
         const url = URL.createObjectURL(blob);
@@ -406,7 +407,7 @@ function ProductCard({
   return (
     <article className="product-card">
       <Link
-        href={`/products/${toProductSlug(product.name)}`}
+        href={`/product?slug=${encodeURIComponent(toProductSlug(product.name))}`}
         className={`product-art ${product.texture}`}
         style={{ "--swatch": product.color } as React.CSSProperties}
       >
@@ -419,7 +420,9 @@ function ProductCard({
       <div className="product-info">
         <div>
           <p>{product.category}</p>
-          <Link href={`/products/${toProductSlug(product.name)}`}>
+          <Link
+            href={`/product?slug=${encodeURIComponent(toProductSlug(product.name))}`}
+          >
             <h3>{product.name}</h3>
           </Link>
           <strong>
@@ -1161,7 +1164,7 @@ function Listing({
                     {String(index + 1).padStart(2, "0")}
                   </span>
                   <Link
-                    href={`/products/${toProductSlug(item.name)}`}
+                    href={`/product?slug=${encodeURIComponent(toProductSlug(item.name))}`}
                     className="lifestyle-art"
                     aria-label={`View ${item.name}`}
                   >
@@ -1178,7 +1181,9 @@ function Listing({
                   </Link>
                   <div>
                     <small>{item.category}</small>
-                    <Link href={`/products/${toProductSlug(item.name)}`}>
+                    <Link
+                      href={`/product?slug=${encodeURIComponent(toProductSlug(item.name))}`}
+                    >
                       <h3>{item.name}</h3>
                     </Link>
                     <p>
@@ -1702,7 +1707,7 @@ function FavoritesDrawer({
       "",
       ...items.map(
         (product, index) =>
-          `${index + 1}. ${product.name} — ${formatNaira(product.price)} per trouser\n${shareUrl()}/products/${toProductSlug(product.name)}`,
+          `${index + 1}. ${product.name} — ${formatNaira(product.price)} per ${product.section === "accessories" ? "item" : "trouser"}\n${shareUrl()}/product?slug=${encodeURIComponent(toProductSlug(product.name))}`,
       ),
     ].join("\n");
   const copyFavorites = async () => {
@@ -1789,7 +1794,7 @@ function FavoritesDrawer({
                     />
                     <div>
                       <Link
-                        href={`/products/${toProductSlug(product.name)}`}
+                        href={`/product?slug=${encodeURIComponent(toProductSlug(product.name))}`}
                         onClick={closeDrawer}
                       >
                         <b>{product.name}</b>
@@ -1928,14 +1933,12 @@ export function Storefront({
   view: StorefrontView;
   productSlug?: string;
 }) {
+  const liveSlug = slug ?? useSearchParams().get("slug") ?? undefined;
   const [cart, setCart] = useLocalStorageState<CartItem[]>(
     "hsg-texture-cart",
     [],
   );
-  const [managedProducts, setManagedProducts] = useLocalStorageState<Product[]>(
-    ADMIN_PRODUCTS_KEY,
-    defaultAdminProducts,
-  );
+  const [managedProducts, setManagedProducts] = useState<Product[]>([]);
   const [managedCategories, setManagedCategories] = useState<Category[]>([]);
   const [drawer, setDrawer] = useState(false);
   const [favoritesDrawer, setFavoritesDrawer] = useState(false);
@@ -1944,24 +1947,22 @@ export function Storefront({
     [],
   );
   useEffect(() => {
-    const refresh = () => {
+    let mounted = true;
+    const refresh = async () => {
       try {
-        const savedProducts = window.localStorage.getItem(ADMIN_PRODUCTS_KEY);
-        if (savedProducts)
-          setManagedProducts(JSON.parse(savedProducts) as Product[]);
+        const next = await getStorefrontProducts();
+        if (mounted) setManagedProducts(next);
       } catch {
-        /* Keep the last valid catalogue. */
+        if (mounted) setManagedProducts([]);
       }
     };
-    migrateAdminCatalog();
-    refresh();
-    window.addEventListener("storage", refresh);
-    window.addEventListener("hsg-catalog-updated", refresh);
+    void refresh();
+    window.addEventListener("hsg-products-updated", refresh);
     return () => {
-      window.removeEventListener("storage", refresh);
-      window.removeEventListener("hsg-catalog-updated", refresh);
+      mounted = false;
+      window.removeEventListener("hsg-products-updated", refresh);
     };
-  }, [setManagedProducts]);
+  }, []);
   useEffect(() => {
     let mounted = true;
     const refreshCategories = async () => {
@@ -2019,7 +2020,7 @@ export function Storefront({
     );
   const count = cart.length;
   const detailProduct = products.find(
-    (product) => toProductSlug(product.name) === slug,
+    (product) => toProductSlug(product.name) === liveSlug,
   );
   const favoriteValue = {
     names: new Set(favorites.map((item) => item.name)),
@@ -2039,9 +2040,9 @@ export function Storefront({
           {view === "home" && <HomeView add={addCardProduct} />}{" "}
           {view === "category" && <Listing category add={addCardProduct} />}{" "}
           {view === "products" && <Listing add={addCardProduct} />}{" "}
-          {view === "product-detail" && slug && (
+          {view === "product-detail" && liveSlug && (
             <ProductDetail
-              slug={slug}
+              slug={liveSlug}
               add={(quantity) => detailProduct && add(detailProduct, quantity)}
             />
           )}{" "}

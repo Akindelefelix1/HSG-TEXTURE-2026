@@ -24,6 +24,8 @@ export type Product = {
 
 export type ProductMedia = {
   id: string;
+  key?: string;
+  url?: string;
   name: string;
   type: "image" | "video";
 };
