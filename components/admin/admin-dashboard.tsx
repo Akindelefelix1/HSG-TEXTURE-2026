@@ -2432,10 +2432,18 @@ function ProductTable({
           {products.map((product) => (
             <tr key={product.id}>
               <td>
-                <span
-                  className={`admin-product-swatch ${product.texture}`}
-                  style={{ "--swatch": product.color } as React.CSSProperties}
-                />
+                {product.image ? (
+                  <img
+                    className="admin-product-swatch"
+                    src={product.image}
+                    alt={`${product.name} cover`}
+                  />
+                ) : (
+                  <span
+                    className={`admin-product-swatch ${product.texture}`}
+                    style={{ "--swatch": product.color } as React.CSSProperties}
+                  />
+                )}
                 <div>
                   <b>{product.name}</b>
                   <small>{product.badge || "Standard"}</small>
