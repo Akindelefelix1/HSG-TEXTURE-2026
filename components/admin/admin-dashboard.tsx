@@ -3,7 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronRight,
@@ -13,6 +13,7 @@ import {
   FolderPlus,
   ImagePlus,
   LayoutDashboard,
+  Loader2,
   LogOut,
   MessageSquareQuote,
   Monitor,
@@ -204,6 +205,9 @@ export function AdminDashboard() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [authPending, setAuthPending] = useState(false);
   const [authError, setAuthError] = useState("");
+  const [activeAction, setActiveAction] = useState("");
+  const [actionError, setActionError] = useState("");
+  const actionInProgress = useRef(false);
   const [tab, setTab] = useState<AdminTab>("dashboard");
   const [catalogSection, setCatalogSection] =
     useState<CatalogSection>("fabric");
@@ -320,6 +324,25 @@ export function AdminDashboard() {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 2400);
   };
+  const runAdminAction = async (
+    label: string,
+    action: () => Promise<void> | void,
+  ) => {
+    if (actionInProgress.current) return;
+    actionInProgress.current = true;
+    setActionError("");
+    setActiveAction(label);
+    try {
+      await action();
+    } catch (cause) {
+      setActionError(
+        cause instanceof Error ? cause.message : "The action could not be completed.",
+      );
+    } finally {
+      actionInProgress.current = false;
+      setActiveAction("");
+    }
+  };
 
   const authenticate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -368,20 +391,22 @@ export function AdminDashboard() {
 
   const logout = async () => {
     setAuthError("");
-    try {
-      const { auth } = getAdminAuthServices();
-      const result = await auth.signOut();
-      if (result.error)
-        throw new Error(result.error.message ?? "Neon sign-out failed.");
-      setAdminUser(null);
-      setProfileOpen(false);
-      setAuthenticated(false);
-      setTab("dashboard");
-    } catch (cause) {
-      setAuthError(
-        cause instanceof Error ? cause.message : "Admin sign-out failed.",
-      );
-    }
+    await runAdminAction("Signing out", async () => {
+      try {
+        const { auth } = getAdminAuthServices();
+        const result = await auth.signOut();
+        if (result.error)
+          throw new Error(result.error.message ?? "Neon sign-out failed.");
+        setAdminUser(null);
+        setProfileOpen(false);
+        setAuthenticated(false);
+        setTab("dashboard");
+      } catch (cause) {
+        setAuthError(
+          cause instanceof Error ? cause.message : "Admin sign-out failed.",
+        );
+      }
+    });
   };
   const activeProducts = products.filter((product) => product.active !== false);
   const inactiveProducts = products.length - activeProducts.length;
@@ -498,67 +523,69 @@ export function AdminDashboard() {
     mediaDrafts.forEach((media) => URL.revokeObjectURL(media.url));
     setProductModal(false);
   };
-  const saveProduct = async (event: FormEvent<HTMLFormElement>) => {
+  const saveProduct = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const name = draft.name.trim();
-    const price = Number(draft.price);
-    const category = categories.find(
-      (item) =>
-        item.name === draft.category &&
-        (item.section ?? "fabric") === draft.section,
-    );
-    if (!name || !category?.id || !Number.isFinite(price) || price <= 0) return;
-    try {
-      const { apiUrl, token } = await getAdminRequestContext();
-      const orderedDrafts = [...mediaDrafts].sort((a, b) =>
-        a.id === coverMediaId ? -1 : b.id === coverMediaId ? 1 : 0,
+    void runAdminAction(editingProduct ? "Saving product" : "Creating product", async () => {
+      const name = draft.name.trim();
+      const price = Number(draft.price);
+      const category = categories.find(
+        (item) =>
+          item.name === draft.category &&
+          (item.section ?? "fabric") === draft.section,
       );
-      const orderedMedia = await Promise.all(
-        orderedDrafts.map(async (media) =>
-          media.file
-            ? uploadAdminProductMedia(apiUrl, token, media.file, name)
-            : media,
-        ),
-      );
-      const input = {
-        name,
-        price,
-        categoryId: category.id,
-        description: draft.description.trim() || undefined,
-        color: draft.color,
-        texture: draft.texture.trim() || "woven",
-        badge: draft.badge.trim() || undefined,
-        active: draft.active,
-        media: orderedMedia,
-      };
-      const saved = editingProduct
-        ? await updateAdminProduct(apiUrl, token, editingProduct, input)
-        : await createAdminProduct(apiUrl, token, input);
-      await Promise.all(
-        removedMediaIds.map((key) =>
-          deleteAdminProductMedia(apiUrl, token, key),
-        ),
-      );
-      publishProducts(
-        editingProduct
-          ? products.map((product) =>
-              product.id === editingProduct ? saved : product,
-            )
-          : [saved, ...products],
-      );
-      closeProductModal();
-      flash(
-        editingProduct
-          ? "Product updated successfully."
-          : "Product created successfully.",
-      );
-    } catch (cause) {
-      setMediaError(
-        cause instanceof Error
-          ? cause.message
-          : "The product could not be saved. Please try again.",
-      );
-    }
+      if (!name || !category?.id || !Number.isFinite(price) || price <= 0) return;
+      try {
+        const { apiUrl, token } = await getAdminRequestContext();
+        const orderedDrafts = [...mediaDrafts].sort((a, b) =>
+          a.id === coverMediaId ? -1 : b.id === coverMediaId ? 1 : 0,
+        );
+        const orderedMedia = await Promise.all(
+          orderedDrafts.map(async (media) =>
+            media.file
+              ? uploadAdminProductMedia(apiUrl, token, media.file, name)
+              : media,
+          ),
+        );
+        const input = {
+          name,
+          price,
+          categoryId: category.id,
+          description: draft.description.trim() || undefined,
+          color: draft.color,
+          texture: draft.texture.trim() || "woven",
+          badge: draft.badge.trim() || undefined,
+          active: draft.active,
+          media: orderedMedia,
+        };
+        const saved = editingProduct
+          ? await updateAdminProduct(apiUrl, token, editingProduct, input)
+          : await createAdminProduct(apiUrl, token, input);
+        await Promise.all(
+          removedMediaIds.map((key) =>
+            deleteAdminProductMedia(apiUrl, token, key),
+          ),
+        );
+        publishProducts(
+          editingProduct
+            ? products.map((product) =>
+                product.id === editingProduct ? saved : product,
+              )
+            : [saved, ...products],
+        );
+        closeProductModal();
+        flash(
+          editingProduct
+            ? "Product updated successfully."
+            : "Product created successfully.",
+        );
+      } catch (cause) {
+        setMediaError(
+          cause instanceof Error
+            ? cause.message
+            : "The product could not be saved. Please try again.",
+        );
+      }
+    });
   };
   const removeProduct = (product: Product) =>
     setDialog({
@@ -567,7 +594,7 @@ export function AdminDashboard() {
       confirmLabel: "Delete product",
       tone: "danger",
       onConfirm: () => {
-        void (async () => {
+        void runAdminAction("Deleting product", async () => {
           if (!product.id) return;
           try {
             const { apiUrl, token } = await getAdminRequestContext();
@@ -593,11 +620,11 @@ export function AdminDashboard() {
               tone: "danger",
             });
           }
-        })();
+        });
       },
     });
   const toggleProduct = (id: string | undefined) => {
-    void (async () => {
+    void runAdminAction("Updating product", async () => {
       const product = products.find((item) => item.id === id);
       if (!product?.id) return;
       try {
@@ -624,68 +651,72 @@ export function AdminDashboard() {
           tone: "danger",
         });
       }
-    })();
+    });
   };
-  const addCategory = async (event: FormEvent<HTMLFormElement>) => {
+  const addCategory = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const name = categoryName.trim();
-    if (
-      !name ||
-      sectionCategories.some(
-        (category) => category.name.toLowerCase() === name.toLowerCase(),
+    void runAdminAction("Creating category", async () => {
+      const name = categoryName.trim();
+      if (
+        !name ||
+        sectionCategories.some(
+          (category) => category.name.toLowerCase() === name.toLowerCase(),
+        )
       )
-    )
-      return;
-    try {
-      const { apiUrl, token } = await getAdminRequestContext();
-      const created = await createAdminCategory(apiUrl, token, {
-        name,
-        description: categoryNote.trim(),
-        section: catalogSection,
-      });
-      publishCategories([...categories, created]);
-      setCategoryName("");
-      setCategoryNote("");
-      flash(
-        `${catalogSection === "fabric" ? "Fabric" : "Accessory"} category created.`,
-      );
-    } catch (cause) {
-      setDialog({
-        title: "Category was not created",
-        description:
-          cause instanceof Error
-            ? cause.message
-            : "The category API request failed.",
-        confirmLabel: "Close",
-        cancelLabel: null,
-        tone: "danger",
-      });
-    }
+        return;
+      try {
+        const { apiUrl, token } = await getAdminRequestContext();
+        const created = await createAdminCategory(apiUrl, token, {
+          name,
+          description: categoryNote.trim(),
+          section: catalogSection,
+        });
+        publishCategories([...categories, created]);
+        setCategoryName("");
+        setCategoryNote("");
+        flash(
+          `${catalogSection === "fabric" ? "Fabric" : "Accessory"} category created.`,
+        );
+      } catch (cause) {
+        setDialog({
+          title: "Category was not created",
+          description:
+            cause instanceof Error
+              ? cause.message
+              : "The category API request failed.",
+          confirmLabel: "Close",
+          cancelLabel: null,
+          tone: "danger",
+        });
+      }
+    });
   };
-  const toggleCategory = async (id: string | undefined) => {
-    const category = categories.find((item) => item.id === id);
-    if (!category?.id) return;
-    try {
-      const { apiUrl, token } = await getAdminRequestContext();
-      const updated = await updateAdminCategory(apiUrl, token, category.id, {
-        active: category.active === false,
-      });
-      publishCategories(
-        categories.map((item) => (item.id === updated.id ? updated : item)),
-      );
-      flash("Category status updated.");
-    } catch (cause) {
-      setDialog({
-        title: "Category was not updated",
-        description:
-          cause instanceof Error
-            ? cause.message
-            : "The category API request failed.",
-        confirmLabel: "Close",
-        cancelLabel: null,
-        tone: "danger",
-      });
-    }
+  const toggleCategory = (id: string | undefined) => {
+    void runAdminAction("Updating category", async () => {
+      const category = categories.find((item) => item.id === id);
+      if (!category?.id) return;
+      try {
+        const { apiUrl, token } = await getAdminRequestContext();
+        const updated = await updateAdminCategory(apiUrl, token, category.id, {
+          active: category.active === false,
+        });
+        publishCategories(
+          categories.map((item) => (item.id === updated.id ? updated : item)),
+        );
+        flash("Category status updated.");
+      } catch (cause) {
+        setDialog({
+          title: "Category was not updated",
+          description:
+            cause instanceof Error
+              ? cause.message
+              : "The category API request failed.",
+          confirmLabel: "Close",
+          cancelLabel: null,
+          tone: "danger",
+        });
+      }
+    });
   };
   const removeCategory = (category: Category) => {
     if (
@@ -710,7 +741,7 @@ export function AdminDashboard() {
       confirmLabel: "Delete category",
       tone: "danger",
       onConfirm: () => {
-        void (async () => {
+        void runAdminAction("Deleting category", async () => {
           if (!category.id) return;
           try {
             const { apiUrl, token } = await getAdminRequestContext();
@@ -731,7 +762,7 @@ export function AdminDashboard() {
               tone: "danger",
             });
           }
-        })();
+        });
       },
     });
   };
@@ -745,20 +776,24 @@ export function AdminDashboard() {
     });
   const saveSiteSettings = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    window.localStorage.setItem(
-      SITE_SETTINGS_KEY,
-      JSON.stringify(siteSettings),
-    );
-    window.dispatchEvent(new Event("hsg-site-settings-updated"));
-    flash("Website content updated.");
+    void runAdminAction("Saving website changes", () => {
+      window.localStorage.setItem(
+        SITE_SETTINGS_KEY,
+        JSON.stringify(siteSettings),
+      );
+      window.dispatchEvent(new Event("hsg-site-settings-updated"));
+      flash("Website content updated.");
+    });
   };
   const updateHeroImage = async (file?: File) => {
     if (!file || !file.type.startsWith("image/")) return;
-    const id = siteSettings.heroImageId ?? "site-hero-image";
-    await saveProductMedia(id, file);
-    if (heroPreview) URL.revokeObjectURL(heroPreview);
-    setHeroPreview(URL.createObjectURL(file));
-    setSiteSettings((current) => ({ ...current, heroImageId: id }));
+    await runAdminAction("Uploading hero image", async () => {
+      const id = siteSettings.heroImageId ?? "site-hero-image";
+      await saveProductMedia(id, file);
+      if (heroPreview) URL.revokeObjectURL(heroPreview);
+      setHeroPreview(URL.createObjectURL(file));
+      setSiteSettings((current) => ({ ...current, heroImageId: id }));
+    });
   };
 
   if (!ready) return <main className="admin-loading">Loading admin…</main>;
@@ -845,7 +880,12 @@ export function AdminDashboard() {
             <Eye size={17} /> View storefront
           </Link>
           <button onClick={logout}>
-            <LogOut size={17} /> Sign out
+            {activeAction === "Signing out" ? (
+              <Loader2 size={17} className="admin-activity-spinner" />
+            ) : (
+              <LogOut size={17} />
+            )}{" "}
+            {activeAction === "Signing out" ? "Signing out…" : "Sign out"}
           </button>
         </div>
       </aside>
@@ -889,12 +929,33 @@ export function AdminDashboard() {
                 </div>
                 <p>{adminUser?.email}</p>
                 <button type="button" onClick={logout}>
-                  <LogOut size={16} /> Sign out
+                  {activeAction === "Signing out" ? (
+                    <Loader2 size={16} className="admin-activity-spinner" />
+                  ) : (
+                    <LogOut size={16} />
+                  )}{" "}
+                  {activeAction === "Signing out"
+                    ? "Signing out…"
+                    : "Sign out"}
                 </button>
               </section>
             )}
           </div>
         </header>
+        {activeAction && (
+          <div className="admin-activity" role="status" aria-live="polite">
+            <Loader2 size={17} className="admin-activity-spinner" />
+            {activeAction}…
+          </div>
+        )}
+        {actionError && (
+          <div className="admin-action-error" role="alert">
+            {actionError}
+            <button type="button" onClick={() => setActionError("")}>
+              Dismiss
+            </button>
+          </div>
+        )}
         {notice && (
           <div className="admin-notice" role="status">
             <Check size={17} />
@@ -912,7 +973,10 @@ export function AdminDashboard() {
                   see.
                 </p>
               </div>
-              <button onClick={() => openProduct()}>
+              <button
+                onClick={() => openProduct()}
+                disabled={Boolean(activeAction)}
+              >
                 <Plus size={17} /> Add product
               </button>
             </div>
@@ -979,7 +1043,10 @@ export function AdminDashboard() {
                   placeholder={`Search ${catalogSection} products`}
                 />
               </div>
-              <button onClick={() => openProduct()}>
+              <button
+                onClick={() => openProduct()}
+                disabled={Boolean(activeAction)}
+              >
                 <Plus size={17} /> New{" "}
                 {catalogSection === "fabric" ? "fabric" : "accessory"}
               </button>
@@ -1040,8 +1107,15 @@ export function AdminDashboard() {
                     placeholder="A short customer-facing description"
                   />
                 </label>
-                <button>
-                  <Plus size={17} /> Create category
+                <button type="submit" disabled={Boolean(activeAction)}>
+                  {activeAction === "Creating category" ? (
+                    <Loader2 size={17} className="admin-activity-spinner" />
+                  ) : (
+                    <Plus size={17} />
+                  )}{" "}
+                  {activeAction === "Creating category"
+                    ? "Creating category…"
+                    : "Create category"}
                 </button>
               </form>
               <div className="admin-panel">
@@ -1071,8 +1145,16 @@ export function AdminDashboard() {
                         </div>
                       </div>
                       <div>
-                        <button onClick={() => toggleCategory(category.id)}>
-                          {category.active === false ? (
+                        <button
+                          onClick={() => toggleCategory(category.id)}
+                          disabled={Boolean(activeAction)}
+                        >
+                          {activeAction === "Updating category" ? (
+                            <Loader2
+                              size={16}
+                              className="admin-activity-spinner"
+                            />
+                          ) : category.active === false ? (
                             <Eye size={16} />
                           ) : (
                             <EyeOff size={16} />
@@ -1085,6 +1167,7 @@ export function AdminDashboard() {
                           className="danger"
                           onClick={() => removeCategory(category)}
                           aria-label={`Delete ${category.name}`}
+                          disabled={Boolean(activeAction)}
                         >
                           <Trash2 size={16} />
                         </button>
@@ -1101,6 +1184,7 @@ export function AdminDashboard() {
             settings={storySettings}
             onChange={setStorySettings}
             onSaved={() => flash("Our Story page updated.")}
+            runAction={runAdminAction}
           />
         )}
         {tab === "settings" && (
@@ -1115,7 +1199,14 @@ export function AdminDashboard() {
                   <h2>Announcement & hero</h2>
                   <p>Update the content customers see first.</p>
                 </div>
-                <button type="submit">Save website changes</button>
+                <button type="submit" disabled={Boolean(activeAction)}>
+                  {activeAction === "Saving website changes" ? (
+                    <Loader2 size={17} className="admin-activity-spinner" />
+                  ) : null}
+                  {activeAction === "Saving website changes"
+                    ? "Saving…"
+                    : "Save website changes"}
+                </button>
               </div>
               <label className="wide">
                 Announcement bar
@@ -1301,7 +1392,11 @@ export function AdminDashboard() {
                   <b>Storefront data</b>
                   <p>Restore the original product and category catalogue.</p>
                 </div>
-                <button className="danger-outline" onClick={resetCatalog}>
+                <button
+                  className="danger-outline"
+                  onClick={resetCatalog}
+                  disabled={Boolean(activeAction)}
+                >
                   Restore defaults
                 </button>
               </div>
@@ -1310,7 +1405,9 @@ export function AdminDashboard() {
                   <b>Admin session</b>
                   <p>Sign out of the dashboard on this device.</p>
                 </div>
-                <button onClick={logout}>Sign out</button>
+                <button onClick={logout} disabled={Boolean(activeAction)}>
+                  Sign out
+                </button>
               </div>
               <div className="admin-security-note">
                 <b>Deployment note</b>
@@ -1543,8 +1640,18 @@ export function AdminDashboard() {
                 <button type="button" onClick={closeProductModal}>
                   Cancel
                 </button>
-                <button type="submit">
-                  {editingProduct ? "Save changes" : "Create product"}
+                <button type="submit" disabled={Boolean(activeAction)}>
+                  {activeAction === "Saving product" ||
+                  activeAction === "Creating product" ? (
+                    <Loader2 size={17} className="admin-activity-spinner" />
+                  ) : null}
+                  {activeAction === "Saving product"
+                    ? "Saving product…"
+                    : activeAction === "Creating product"
+                      ? "Creating product…"
+                      : editingProduct
+                        ? "Save changes"
+                        : "Create product"}
                 </button>
               </div>
             </form>
@@ -1569,10 +1676,17 @@ function StoryEditor({
   settings,
   onChange,
   onSaved,
+  runAction,
+  activeAction,
 }: {
   settings: StorySettings;
   onChange: (value: StorySettings) => void;
   onSaved: () => void;
+  runAction: (
+    label: string,
+    action: () => Promise<void> | void,
+  ) => Promise<void>;
+  activeAction: string;
 }) {
   const [panel, setPanel] = useState<"content" | "identity" | "feedback">(
     "content",
@@ -1587,8 +1701,10 @@ function StoryEditor({
   };
   const saveCopy = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    persist(settings);
-    onSaved();
+    void runAction("Saving story changes", () => {
+      persist(settings);
+      onSaved();
+    });
   };
   const setValue = (
     index: number,
@@ -1603,45 +1719,48 @@ function StoryEditor({
     });
   const uploadCollage = async (index: number, file?: File) => {
     if (!file || !file.type.startsWith("image/")) return;
-    const previous = settings.collageMediaIds[index];
-    const id = previous || makeAdminId("story-collage");
-    await saveProductMedia(id, file);
-    const ids = [...settings.collageMediaIds];
-    ids[index] = id;
-    persist({ ...settings, collageMediaIds: ids });
-    onSaved();
+    await runAction("Uploading story image", async () => {
+      const previous = settings.collageMediaIds[index];
+      const id = previous || makeAdminId("story-collage");
+      await saveProductMedia(id, file);
+      const ids = [...settings.collageMediaIds];
+      ids[index] = id;
+      persist({ ...settings, collageMediaIds: ids });
+      onSaved();
+    });
   };
   const addFeedback = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!customerName.trim() || !quote.trim()) return;
-    let mediaId: string | undefined;
-    let mediaType: "image" | "video" | undefined;
-    let mediaName: string | undefined;
-    if (feedbackFile) {
-      mediaId = makeAdminId("feedback-media");
-      mediaType = feedbackFile.type.startsWith("video/") ? "video" : "image";
-      mediaName = feedbackFile.name;
-      await saveProductMedia(mediaId, feedbackFile);
-    }
-    const feedback: CustomerFeedback = {
-      id: makeAdminId("feedback"),
-      customerName: customerName.trim(),
-      quote: quote.trim(),
-      mediaId,
-      mediaType,
-      mediaName,
-      active: true,
-    };
-    persist({ ...settings, feedback: [feedback, ...settings.feedback] });
-    setCustomerName("");
-    setQuote("");
-    setFeedbackFile(null);
-    (
-      event.currentTarget.elements.namedItem(
-        "feedbackMedia",
-      ) as HTMLInputElement
-    ).value = "";
-    onSaved();
+    const form = event.currentTarget;
+    await runAction("Publishing customer feedback", async () => {
+      let mediaId: string | undefined;
+      let mediaType: "image" | "video" | undefined;
+      let mediaName: string | undefined;
+      if (feedbackFile) {
+        mediaId = makeAdminId("feedback-media");
+        mediaType = feedbackFile.type.startsWith("video/")
+          ? "video"
+          : "image";
+        mediaName = feedbackFile.name;
+        await saveProductMedia(mediaId, feedbackFile);
+      }
+      const feedback: CustomerFeedback = {
+        id: makeAdminId("feedback"),
+        customerName: customerName.trim(),
+        quote: quote.trim(),
+        mediaId,
+        mediaType,
+        mediaName,
+        active: true,
+      };
+      persist({ ...settings, feedback: [feedback, ...settings.feedback] });
+      setCustomerName("");
+      setQuote("");
+      setFeedbackFile(null);
+      (form.elements.namedItem("feedbackMedia") as HTMLInputElement).value = "";
+      onSaved();
+    });
   };
   const updateFeedback = (id: string, patch: Partial<CustomerFeedback>) =>
     persist({
@@ -1651,12 +1770,16 @@ function StoryEditor({
       ),
     });
   const removeFeedback = (item: CustomerFeedback) => {
-    if (item.mediaId) void deleteProductMedia(item.mediaId);
-    persist({
-      ...settings,
-      feedback: settings.feedback.filter((feedback) => feedback.id !== item.id),
+    void runAction("Removing customer feedback", async () => {
+      if (item.mediaId) await deleteProductMedia(item.mediaId);
+      persist({
+        ...settings,
+        feedback: settings.feedback.filter(
+          (feedback) => feedback.id !== item.id,
+        ),
+      });
+      onSaved();
     });
-    onSaved();
   };
   return (
     <section className="admin-content admin-story-editor">
