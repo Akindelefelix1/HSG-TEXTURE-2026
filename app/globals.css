@@ -1728,6 +1728,29 @@ footer {
   }
 }
 @media (max-width: 560px) {
+  .recent-product-rail {
+    overflow: visible;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  .recent-product-track {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+    gap: 12px;
+    overflow: visible;
+    padding-bottom: 0;
+  }
+  .recent-product-track .recent-product-card {
+    width: 100%;
+    min-width: 0;
+    height: 260px;
+    flex: initial;
+    padding: 12px;
+  }
+  .recent-product-card .category-text b {
+    font-size: 1.2rem;
+  }
   .category-track .category-card {
     width: 250px;
     height: 300px;
@@ -3204,6 +3227,39 @@ footer {
   align-items: center;
   gap: 6px;
   font-size: 0.7rem;
+}
+.admin-pagination {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 0 2px;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+.admin-pagination > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.admin-pagination button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  background: white;
+  padding: 8px 10px;
+  color: var(--ink);
+  font: inherit;
+}
+.admin-pagination button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.admin-pagination [aria-current="page"] {
+  color: var(--ink);
+  white-space: nowrap;
 }
 .admin-settings {
   max-width: 850px;

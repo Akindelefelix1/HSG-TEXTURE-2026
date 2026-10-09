@@ -933,7 +933,10 @@ function CategoryRail({
   if (!latestProducts.length)
     return <p className="categories-empty">New products are coming soon.</p>;
   return (
-    <div className="category-rail" aria-label="Recently uploaded products">
+    <div
+      className="category-rail recent-product-rail"
+      aria-label="Recently uploaded products"
+    >
       <div className="category-track recent-product-track">
         {latestProducts.map((product, index) => (
           <Link

@@ -7,6 +7,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
   ChevronDown,
+  ChevronLeft,
   ChevronRight,
   ChevronUp,
   Edit3,
@@ -98,6 +99,7 @@ type ProductDraft = {
 };
 type MediaDraft = ProductMedia & { url: string; file?: File };
 type AdminUser = { email: string; name?: string; role: "admin" };
+const ADMIN_PAGE_SIZE = 10;
 const emptyProduct: ProductDraft = {
   section: "fabric",
   name: "",
@@ -220,6 +222,9 @@ export function AdminDashboard() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [search, setSearch] = useState("");
+  const [overviewPage, setOverviewPage] = useState(1);
+  const [productsPage, setProductsPage] = useState(1);
+  const [categoriesPage, setCategoriesPage] = useState(1);
   const [productModal, setProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<string | null>(null);
   const [previewProduct, setPreviewProduct] = useState<Product | null>(null);
@@ -444,6 +449,20 @@ export function AdminDashboard() {
       ),
     [products, catalogSection, search],
   );
+  const pageCount = (total: number) =>
+    Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE));
+  const currentOverviewPage = Math.min(overviewPage, pageCount(products.length));
+  const currentProductsPage = Math.min(
+    productsPage,
+    pageCount(filteredProducts.length),
+  );
+  const currentCategoriesPage = Math.min(
+    categoriesPage,
+    pageCount(sectionCategories.length),
+  );
+  const overviewPageStart = (currentOverviewPage - 1) * ADMIN_PAGE_SIZE;
+  const productsPageStart = (currentProductsPage - 1) * ADMIN_PAGE_SIZE;
+  const categoriesPageStart = (currentCategoriesPage - 1) * ADMIN_PAGE_SIZE;
 
   const openProduct = async (product?: Product) => {
     setEditingProduct(product?.id ?? null);
@@ -1140,8 +1159,17 @@ export function AdminDashboard() {
                 </button>
               </div>
               <ProductTable
-                products={products.slice(0, 6)}
+                products={products.slice(
+                  overviewPageStart,
+                  overviewPageStart + ADMIN_PAGE_SIZE,
+                )}
                 onPreview={setPreviewProduct}
+              />
+              <AdminPagination
+                page={currentOverviewPage}
+                pageSize={ADMIN_PAGE_SIZE}
+                total={products.length}
+                onPageChange={setOverviewPage}
               />
             </div>
           </section>
@@ -1153,6 +1181,7 @@ export function AdminDashboard() {
               onChange={(value) => {
                 setCatalogSection(value);
                 setSearch("");
+                setProductsPage(1);
               }}
               fabricCount={
                 products.filter(
@@ -1169,7 +1198,10 @@ export function AdminDashboard() {
                 <Search size={17} />
                 <input
                   value={search}
-                  onChange={(event) => setSearch(event.target.value)}
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    setProductsPage(1);
+                  }}
                   placeholder={`Search ${catalogSection} products`}
                 />
               </div>
@@ -1183,8 +1215,17 @@ export function AdminDashboard() {
             </div>
             <div className="admin-panel">
               <ProductTable
-                products={filteredProducts}
+                products={filteredProducts.slice(
+                  productsPageStart,
+                  productsPageStart + ADMIN_PAGE_SIZE,
+                )}
                 onPreview={setPreviewProduct}
+              />
+              <AdminPagination
+                page={currentProductsPage}
+                pageSize={ADMIN_PAGE_SIZE}
+                total={filteredProducts.length}
+                onPageChange={setProductsPage}
               />
             </div>
           </section>
@@ -1193,7 +1234,10 @@ export function AdminDashboard() {
           <section className="admin-content">
             <SectionSwitch
               value={catalogSection}
-              onChange={setCatalogSection}
+              onChange={(value) => {
+                setCatalogSection(value);
+                setCategoriesPage(1);
+              }}
               fabricCount={
                 categories.filter(
                   (category) => (category.section ?? "fabric") === "fabric",
@@ -1259,73 +1303,89 @@ export function AdminDashboard() {
                   </div>
                 </div>
                 <div className="admin-category-list">
-                  {sectionCategories.map((category, index) => (
-                    <article key={category.id}>
-                      <div>
-                        <span
-                          className={
-                            category.active === false
-                              ? "status-dot off"
-                              : "status-dot"
-                          }
-                        />
-                        <div>
-                          <b>{category.name}</b>
-                          <p>{category.note || "No description"}</p>
-                        </div>
-                      </div>
-                      <div>
-                        <span className="admin-category-order">
-                          <button
-                            type="button"
-                            onClick={() => moveCategory(index, -1)}
-                            disabled={Boolean(activeAction) || index === 0}
-                            aria-label={`Move ${category.name} up`}
-                          >
-                            <ChevronUp size={16} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => moveCategory(index, 1)}
-                            disabled={
-                              Boolean(activeAction) ||
-                              index === sectionCategories.length - 1
-                            }
-                            aria-label={`Move ${category.name} down`}
-                          >
-                            <ChevronDown size={16} />
-                          </button>
-                        </span>
-                        <button
-                          onClick={() => toggleCategory(category.id)}
-                          disabled={Boolean(activeAction)}
-                        >
-                          {activeAction === "Updating category" ? (
-                            <Loader2
-                              size={16}
-                              className="admin-activity-spinner"
+                  {sectionCategories
+                    .slice(
+                      categoriesPageStart,
+                      categoriesPageStart + ADMIN_PAGE_SIZE,
+                    )
+                    .map((category, pageIndex) => {
+                      const index = categoriesPageStart + pageIndex;
+                      return (
+                        <article key={category.id}>
+                          <div>
+                            <span
+                              className={
+                                category.active === false
+                                  ? "status-dot off"
+                                  : "status-dot"
+                              }
                             />
-                          ) : category.active === false ? (
-                            <Eye size={16} />
-                          ) : (
-                            <EyeOff size={16} />
-                          )}{" "}
-                          {category.active === false
-                            ? "Activate"
-                            : "Deactivate"}
-                        </button>
-                        <button
-                          className="danger"
-                          onClick={() => removeCategory(category)}
-                          aria-label={`Delete ${category.name}`}
-                          disabled={Boolean(activeAction)}
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </article>
-                  ))}
+                            <div>
+                              <b>{category.name}</b>
+                              <p>{category.note || "No description"}</p>
+                            </div>
+                          </div>
+                          <div>
+                            <span className="admin-category-order">
+                              <button
+                                type="button"
+                                onClick={() => moveCategory(index, -1)}
+                                disabled={
+                                  Boolean(activeAction) || index === 0
+                                }
+                                aria-label={`Move ${category.name} up`}
+                              >
+                                <ChevronUp size={16} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => moveCategory(index, 1)}
+                                disabled={
+                                  Boolean(activeAction) ||
+                                  index === sectionCategories.length - 1
+                                }
+                                aria-label={`Move ${category.name} down`}
+                              >
+                                <ChevronDown size={16} />
+                              </button>
+                            </span>
+                            <button
+                              onClick={() => toggleCategory(category.id)}
+                              disabled={Boolean(activeAction)}
+                            >
+                              {activeAction === "Updating category" ? (
+                                <Loader2
+                                  size={16}
+                                  className="admin-activity-spinner"
+                                />
+                              ) : category.active === false ? (
+                                <Eye size={16} />
+                              ) : (
+                                <EyeOff size={16} />
+                              )}{" "}
+                              {category.active === false
+                                ? "Activate"
+                                : "Deactivate"}
+                            </button>
+                            <button
+                              className="danger"
+                              onClick={() => removeCategory(category)}
+                              aria-label={`Delete ${category.name}`}
+                              disabled={Boolean(activeAction)}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </article>
+                      );
+                    })}
                 </div>
+                <AdminPagination
+                  page={currentCategoriesPage}
+                  pageSize={ADMIN_PAGE_SIZE}
+                  total={sectionCategories.length}
+                  onPageChange={setCategoriesPage}
+                />
               </div>
             </div>
           </section>
@@ -2546,6 +2606,52 @@ function SectionSwitch({
         <b>{accessoriesCount}</b>
       </button>
     </div>
+  );
+}
+
+function AdminPagination({
+  page,
+  pageSize,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  const pageCount = Math.ceil(total / pageSize);
+  if (pageCount <= 1) return null;
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+
+  return (
+    <nav className="admin-pagination" aria-label="List pagination">
+      <span>
+        Showing {start}–{end} of {total}
+      </span>
+      <div>
+        <button
+          type="button"
+          onClick={() => onPageChange(page - 1)}
+          disabled={page <= 1}
+          aria-label="Previous page"
+        >
+          <ChevronLeft size={16} /> Previous
+        </button>
+        <span aria-current="page">
+          Page {page} of {pageCount}
+        </span>
+        <button
+          type="button"
+          onClick={() => onPageChange(page + 1)}
+          disabled={page >= pageCount}
+          aria-label="Next page"
+        >
+          Next <ChevronRight size={16} />
+        </button>
+      </div>
+    </nav>
   );
 }
 
