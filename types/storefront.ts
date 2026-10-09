@@ -12,6 +12,7 @@ export type Product = {
   name: string;
   category: string;
   price: number;
+  saleUnit?: "trouser" | "item";
   color: string;
   texture: string;
   description?: string;

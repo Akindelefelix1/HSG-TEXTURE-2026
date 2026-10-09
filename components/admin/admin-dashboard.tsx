@@ -83,6 +83,7 @@ type ProductDraft = {
   name: string;
   category: string;
   price: string;
+  saleUnit: "trouser" | "item";
   composition: string;
   width: string;
   feel: string;
@@ -100,6 +101,7 @@ const emptyProduct: ProductDraft = {
   name: "",
   category: "",
   price: "",
+  saleUnit: "trouser",
   composition: "",
   width: "",
   feel: "",
@@ -459,6 +461,9 @@ export function AdminDashboard() {
             name: product.name,
             category: product.category,
             price: String(product.price),
+            saleUnit:
+              product.saleUnit ??
+              (section === "accessories" ? "item" : "trouser"),
             composition: product.composition ?? "",
             width: product.width ?? "",
             feel: product.feel ?? "",
@@ -570,6 +575,7 @@ export function AdminDashboard() {
             name,
             price,
             categoryId: category.id,
+            saleUnit: draft.saleUnit,
             description: draft.description.trim() || undefined,
             composition: draft.composition.trim() || undefined,
             width: draft.width.trim() || undefined,
@@ -1565,6 +1571,7 @@ export function AdminDashboard() {
                     setDraft({
                       ...draft,
                       section,
+                      saleUnit: section === "accessories" ? "item" : "trouser",
                       category: first?.name ?? "",
                     });
                   }}
@@ -1595,6 +1602,25 @@ export function AdminDashboard() {
                       </option>
                     ))}
                 </select>
+              </label>
+              <label>
+                Sold as
+                <select
+                  value={draft.saleUnit}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      saleUnit: event.target.value as "trouser" | "item",
+                    })
+                  }
+                  disabled={draft.section === "accessories"}
+                >
+                  <option value="trouser">Per trouser</option>
+                  <option value="item">Per item</option>
+                </select>
+                <small>
+                  This sets how the price and quantity are shown in the store.
+                </small>
               </label>
               <label className="wide">
                 Product name

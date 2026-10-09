@@ -28,6 +28,7 @@ type ApiProduct = {
   slug: string;
   name: string;
   price: number;
+  saleUnit?: "trouser" | "item" | null;
   description: string;
   composition?: string | null;
   width?: string | null;
@@ -66,6 +67,9 @@ const toProduct = (product: ApiProduct): Product => ({
   section: product.category.section,
   category: product.category.name,
   price: Number(product.price),
+  saleUnit:
+    product.saleUnit ??
+    (product.category.section === "accessories" ? "item" : "trouser"),
   color: product.color,
   texture: product.texture,
   description: product.description || undefined,
@@ -215,6 +219,7 @@ export async function getAdminProducts(baseUrl: string, token: string) {
 type ProductInput = {
   name: string;
   price: number;
+  saleUnit: "trouser" | "item";
   description?: string;
   composition?: string;
   width?: string;
@@ -235,6 +240,7 @@ const productBody = (input: ProductInput) => ({
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, ""),
   price: input.price,
+  saleUnit: input.saleUnit,
   description: input.description ?? "",
   composition: input.composition ?? null,
   width: input.width ?? null,

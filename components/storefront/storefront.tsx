@@ -74,15 +74,15 @@ const WHATSAPP_NUMBER = "2348107050824";
 const whatsappOrderUrl = (message: string) =>
   `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
 const quantityStep = (product: Product) =>
-  product.section === "accessories" ? 1 : 0.5;
+  product.saleUnit === "item" || product.section === "accessories" ? 1 : 0.5;
+const productSaleUnit = (product: Product) =>
+  product.saleUnit ?? (product.section === "accessories" ? "item" : "trouser");
 const quantityUnit = (product: Product, quantity: number) =>
-  product.section === "accessories"
-    ? quantity === 1
-      ? "item"
-      : "items"
-    : quantity === 1
-      ? "trouser"
-      : "trousers";
+  quantity === 1
+    ? productSaleUnit(product)
+    : productSaleUnit(product) === "trouser"
+      ? "trousers"
+      : "items";
 
 function useLocalStorageState<T>(key: string, initialValue: T) {
   const [state, setState] = useState<T>(initialValue);
@@ -425,18 +425,18 @@ function StorefrontBottomNav({
     { href: "/", label: "Home", Icon: House, active: pathname === "/" },
     {
       href: "/products",
-      label: "Products",
+      label: "Fabric",
       Icon: Package,
-      active: pathname === "/products" || pathname.startsWith("/product"),
+      active:
+        pathname === "/products" ||
+        (pathname === "/category" && categorySection === "fabric"),
     },
     {
-      href:
-        categorySection === "accessories"
-          ? "/category?section=accessories"
-          : "/category",
-      label: "Categories",
+      href: "/category?section=accessories",
+      label: "Accessories",
       Icon: Tags,
-      active: pathname === "/category",
+      active:
+        pathname === "/category" && categorySection === "accessories",
     },
   ];
 
@@ -462,12 +462,12 @@ function StorefrontBottomNav({
         </span>
         <span>Favourites</span>
       </button>
-      <button type="button" onClick={openCart} aria-label="Open shopping bag">
+      <button type="button" onClick={openCart} aria-label="Open cart">
         <span className="storefront-bottom-icon">
           <ShoppingBag size={21} strokeWidth={1.8} />
           {cart > 0 && <span className="storefront-bottom-count">{cart}</span>}
         </span>
-        <span>Bag</span>
+        <span>Cart</span>
       </button>
     </nav>
   );
@@ -481,7 +481,7 @@ function ProductCard({
 }) {
   const favorites = useContext(FavoriteContext);
   const saved = favorites.names.has(product.name);
-  const unit = product.section === "accessories" ? "item" : "trouser";
+  const unit = productSaleUnit(product);
   return (
     <article className="product-card">
       <Link
@@ -750,9 +750,9 @@ function CartDrawer({
                 name="phone"
                 type="tel"
                 autoComplete="tel"
-                placeholder="+2348012345678"
-                pattern="\\+[1-9][0-9]{7,14}"
-                title="Enter an international phone number, for example +2348012345678"
+                placeholder="+2348012345678 or 08012345678"
+                pattern={"(?:\\+234[789][01][0-9]{8}|0[789][01][0-9]{8})"}
+                title="Enter a Nigerian phone number, for example +2348012345678 or 08012345678"
                 required
                 disabled={checkoutPending}
               />
@@ -807,7 +807,9 @@ function CartDrawer({
                   />
                   <div>
                     <b>{product.name}</b>
-                    <p>{formatNaira(product.price)} / trouser</p>
+                    <p>
+                      {formatNaira(product.price)} / {productSaleUnit(product)}
+                    </p>
                     <div className="qty">
                       <button
                         onClick={() =>
@@ -938,41 +940,34 @@ function CartDrawer({
     </div>
   );
 }
-function CategoryRail() {
-  const { categories } = useContext(CatalogContext);
-  const fabricCategories = categories.filter(
-    (category) => (category.section ?? "fabric") === "fabric",
-  );
-  const loop = [...fabricCategories, ...fabricCategories];
-  if (!fabricCategories.length)
+function CategoryRail({ products }: { products: Product[] }) {
+  const latestProducts = products.slice(0, 10);
+  if (!latestProducts.length)
     return (
       <p className="categories-empty">
-        New fabric collections are coming soon.
+        New products are coming soon.
       </p>
     );
   return (
-    <div className="category-rail" aria-label="Fabric collections">
-      <div className="category-track">
-        {loop.map((c, i) => {
-          const duplicate = i >= fabricCategories.length;
-          return (
-            <Link
-              href={`/products?category=${encodeURIComponent(c.name)}`}
-              key={`${c.id ?? c.name}-${i}`}
-              className={`category-card c${i % 4}`}
-              aria-hidden={duplicate ? true : undefined}
-              tabIndex={duplicate ? -1 : undefined}
-            >
-              <span className="category-text">
-                <small>
-                  {String((i % fabricCategories.length) + 1).padStart(2, "0")}
-                </small>
-                <b>{c.name}</b>
-                <p>{c.note}</p>
-              </span>
-            </Link>
-          );
-        })}
+    <div className="category-rail" aria-label="Recently uploaded products">
+      <div className="category-track recent-product-track">
+        {latestProducts.map((product, index) => (
+          <Link
+            href={`/product?slug=${encodeURIComponent(toProductSlug(product.name))}`}
+            key={product.id ?? product.name}
+            className={`category-card recent-product-card c${index % 4}`}
+            style={{ "--swatch": product.color } as React.CSSProperties}
+          >
+            <ProductMediaView product={product} />
+            <span className="category-text">
+              <small>{product.category}</small>
+              <b>{product.name}</b>
+              <p>
+                {formatNaira(product.price)} / {productSaleUnit(product)}
+              </p>
+            </span>
+          </Link>
+        ))}
       </div>
     </div>
   );
@@ -993,10 +988,7 @@ function HomeView({ add }: { add: () => void }) {
             <br />
             <em>Make it yours.</em>
           </h1>
-          <p>
-            Exceptional textures for defining moments—from everyday silhouettes
-            to once-in-a-lifetime celebrations.
-          </p>
+          <p>{defaultSiteSettings.heroDescription}</p>
           <div className="hero-buttons">
             <Link href="/products" className="primary">
               Shop new arrivals
@@ -1026,12 +1018,12 @@ function HomeView({ add }: { add: () => void }) {
       </section>
       <section className="category-section">
         <SectionTitle
-          eyebrow="Shop by mood"
-          title="A texture for every story"
-          href="/category"
-          link="View every collection"
+          eyebrow="Just uploaded"
+          title="New to the collection"
+          href="/products"
+          link="View all products"
         />
-        <CategoryRail />
+        <CategoryRail products={products} />
       </section>
       <div className="home-category-sections">
         {featuredCategories.map((category, index) => (
@@ -1316,7 +1308,7 @@ function Listing({
           <p>
             {isNewArrivals
               ? "Explore the latest additions to our fabric edit."
-              : "Curated textiles, sold by the trouser and ready for your next idea."}
+              : "Curated textiles, ready for your next idea."}
           </p>
         </section>
       )}
@@ -1464,7 +1456,7 @@ function ProductShare({ product }: { product: Product }) {
     const url = window.location.href;
     return {
       url,
-      text: `Take a look at ${product.name} from HSG Texture — ${formatNaira(product.price)} per ${product.section === "accessories" ? "item" : "trouser"}.`,
+      text: `Take a look at ${product.name} from HSG Texture — ${formatNaira(product.price)} per ${productSaleUnit(product)}.`,
     };
   };
   const shareWhatsApp = () => {
@@ -1545,7 +1537,7 @@ function ProductDetail({
     );
   const isAccessory = product.section === "accessories";
   const step = quantityStep(product);
-  const unit = isAccessory ? "item" : "trouser";
+  const unit = productSaleUnit(product);
   const orderMessage = `Hello HSG Texture, I would like to order:\n\n${product.name}\nCategory: ${product.category}\nQuantity: ${quantity} ${quantity === 1 ? unit : `${unit}s`}\nPrice per ${unit}: ${formatNaira(product.price)}\nTotal: ${formatNaira(product.price * quantity)}\n\nPlease confirm availability and delivery details.`;
   const bulkMessage = `Hello HSG Texture, I am interested in buying ${product.name} in a large quantity. Please tell me about your bulk-order discount and minimum quantity.`;
   return (
@@ -1977,7 +1969,7 @@ function FavoritesDrawer({
       "",
       ...items.map(
         (product, index) =>
-          `${index + 1}. ${product.name} — ${formatNaira(product.price)} per ${product.section === "accessories" ? "item" : "trouser"}\n${shareUrl()}/product?slug=${encodeURIComponent(toProductSlug(product.name))}`,
+          `${index + 1}. ${product.name} — ${formatNaira(product.price)} per ${productSaleUnit(product)}\n${shareUrl()}/product?slug=${encodeURIComponent(toProductSlug(product.name))}`,
       ),
     ].join("\n");
   const copyFavorites = async () => {
@@ -2069,7 +2061,9 @@ function FavoritesDrawer({
                       >
                         <b>{product.name}</b>
                       </Link>
-                      <p>{formatNaira(product.price)} / trouser</p>
+                      <p>
+                        {formatNaira(product.price)} / {productSaleUnit(product)}
+                      </p>
                       <div className="favorite-actions">
                         <button
                           className={justAdded ? "added" : ""}
