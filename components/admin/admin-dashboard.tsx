@@ -1185,6 +1185,7 @@ export function AdminDashboard() {
             onChange={setStorySettings}
             onSaved={() => flash("Our Story page updated.")}
             runAction={runAdminAction}
+            activeAction={activeAction}
           />
         )}
         {tab === "settings" && (
@@ -1375,6 +1376,7 @@ export function AdminDashboard() {
                     <input
                       type="file"
                       accept="image/*"
+                      disabled={Boolean(activeAction)}
                       onChange={(event) => {
                         void updateHeroImage(event.target.files?.[0]);
                         event.target.value = "";
@@ -1839,7 +1841,14 @@ function StoryEditor({
                 page.
               </p>
             </div>
-            <button type="submit">Save changes</button>
+            <button type="submit" disabled={Boolean(activeAction)}>
+              {activeAction === "Saving story changes" ? (
+                <Loader2 size={16} className="admin-activity-spinner" />
+              ) : null}
+              {activeAction === "Saving story changes"
+                ? "Saving…"
+                : "Save changes"}
+            </button>
           </div>
           <div className="admin-story-form-grid">
             <label>
@@ -1907,7 +1916,14 @@ function StoryEditor({
                 <h3>What guides us</h3>
                 <p>Edit the values customers see below the story.</p>
               </div>
-              <button type="submit">Save values</button>
+              <button type="submit" disabled={Boolean(activeAction)}>
+                {activeAction === "Saving story changes" ? (
+                  <Loader2 size={16} className="admin-activity-spinner" />
+                ) : null}
+                {activeAction === "Saving story changes"
+                  ? "Saving…"
+                  : "Save values"}
+              </button>
             </div>
             <label className="admin-story-label">
               Section heading
@@ -1981,6 +1997,7 @@ function StoryEditor({
                   <input
                     type="file"
                     accept="image/*"
+                    disabled={Boolean(activeAction)}
                     onChange={(event) => {
                       void uploadCollage(index, event.target.files?.[0]);
                       event.target.value = "";
@@ -2003,7 +2020,14 @@ function StoryEditor({
                 <span>Section introduction</span>
                 <h3>Customer review heading</h3>
               </div>
-              <button type="submit">Save heading</button>
+              <button type="submit" disabled={Boolean(activeAction)}>
+                {activeAction === "Saving story changes" ? (
+                  <Loader2 size={16} className="admin-activity-spinner" />
+                ) : null}
+                {activeAction === "Saving story changes"
+                  ? "Saving…"
+                  : "Save heading"}
+              </button>
             </div>
             <div className="admin-story-form-grid">
               <label>
@@ -2076,13 +2100,24 @@ function StoryEditor({
                   name="feedbackMedia"
                   type="file"
                   accept="image/*,video/*"
+                  disabled={Boolean(activeAction)}
                   onChange={(event) =>
                     setFeedbackFile(event.target.files?.[0] ?? null)
                   }
                 />
               </label>
-              <button type="submit">
-                <Plus size={16} /> Publish feedback
+              <button
+                type="submit"
+                disabled={Boolean(activeAction)}
+              >
+                {activeAction === "Publishing customer feedback" ? (
+                  <Loader2 size={16} className="admin-activity-spinner" />
+                ) : (
+                  <Plus size={16} />
+                )}{" "}
+                {activeAction === "Publishing customer feedback"
+                  ? "Publishing…"
+                  : "Publish feedback"}
               </button>
             </form>
             <div className="admin-panel admin-feedback-list">
@@ -2132,15 +2167,34 @@ function StoryEditor({
                     <div>
                       <button
                         onClick={() =>
-                          updateFeedback(item.id, { active: !item.active })
+                          void runAction("Updating customer feedback", () =>
+                            updateFeedback(item.id, {
+                              active: !item.active,
+                            }),
+                          )
                         }
+                        disabled={Boolean(activeAction)}
                       >
-                        {item.active ? <EyeOff size={15} /> : <Eye size={15} />}{" "}
-                        {item.active ? "Hide" : "Show"}
+                        {activeAction === "Updating customer feedback" ? (
+                          <Loader2
+                            size={15}
+                            className="admin-activity-spinner"
+                          />
+                        ) : item.active ? (
+                          <EyeOff size={15} />
+                        ) : (
+                          <Eye size={15} />
+                        )}{" "}
+                        {activeAction === "Updating customer feedback"
+                          ? "Updating…"
+                          : item.active
+                            ? "Hide"
+                            : "Show"}
                       </button>
                       <button
                         className="danger"
                         onClick={() => removeFeedback(item)}
+                        disabled={Boolean(activeAction)}
                         aria-label={`Delete feedback from ${item.customerName}`}
                       >
                         <Trash2 size={15} />

@@ -76,7 +76,7 @@ const ensureOk = async (response: Response) => {
   if (!response.ok)
     throw new Error(
       (await readError(response)) ||
-        `Category request failed (HTTP ${response.status}).`,
+        `API request failed (HTTP ${response.status}).`,
     );
   return response;
 };
@@ -158,6 +158,22 @@ export async function getStorefrontProducts() {
     await fetch(`${apiUrl()}/api/v1/catalog/products`, { cache: "no-store" }),
   );
   return ((await response.json()) as ApiProduct[]).map(toProduct);
+}
+export async function createStorefrontOrder(input: {
+  customerName: string;
+  phone: string;
+  email?: string;
+  deliveryAddress: string;
+  items: Array<{ productId: string; quantity: number }>;
+}) {
+  const response = await ensureOk(
+    await fetch(`${apiUrl()}/api/v1/orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    }),
+  );
+  return (await response.json()) as { id: string };
 }
 export async function getAdminProducts(baseUrl: string, token: string) {
   const response = await ensureOk(

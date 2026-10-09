@@ -4,12 +4,21 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import {
   Check,
   ChevronRight,
   Copy,
   Heart,
+  Loader2,
   Menu,
   Minus,
   Plus,
@@ -21,7 +30,6 @@ import {
   X,
 } from "lucide-react";
 import {
-  ADMIN_CATEGORIES_KEY,
   SITE_SETTINGS_KEY,
   STORY_SETTINGS_KEY,
   defaultSiteSettings,
@@ -40,6 +48,7 @@ import {
   AccountProfileButton,
 } from "@/components/storefront/account-access";
 import {
+  createStorefrontOrder,
   getStorefrontCategories,
   getStorefrontProducts,
 } from "@/lib/catalog-api";
@@ -454,14 +463,22 @@ function CartDrawer({
   close,
   items,
   update,
+  clear,
 }: {
   open: boolean;
   close: () => void;
   items: CartItem[];
   update: (name: string, quantity: number) => void;
+  clear: () => void;
 }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutPending, setCheckoutPending] = useState(false);
+  const checkoutInProgress = useRef(false);
+  const [checkoutError, setCheckoutError] = useState("");
+  const [whatsappFollowUpUrl, setWhatsappFollowUpUrl] = useState("");
+  const [savedOrderId, setSavedOrderId] = useState("");
   const count = items.length;
   const total = items.reduce(
     (sum, item) => sum + item.product.price * item.quantity,
@@ -520,8 +537,82 @@ function CartDrawer({
     }
   };
   const closeDrawer = () => {
+    if (checkoutInProgress.current) return;
     setShareOpen(false);
+    setCheckoutOpen(false);
+    setCheckoutError("");
+    setWhatsappFollowUpUrl("");
+    setSavedOrderId("");
     close();
+  };
+  const placeOrder = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (checkoutInProgress.current || !items.length) return;
+
+    const form = new FormData(event.currentTarget);
+    const customerName = String(form.get("customerName") ?? "").trim();
+    const phone = String(form.get("phone") ?? "").trim();
+    const email = String(form.get("email") ?? "").trim();
+    const deliveryAddress = String(form.get("deliveryAddress") ?? "").trim();
+    const orderItems = items.map(({ product, quantity }) =>
+      typeof product.id === "string"
+        ? { productId: product.id, quantity }
+        : null,
+    );
+    if (orderItems.some((item) => item === null)) {
+      setCheckoutError(
+        "One or more bag items are not connected to the live catalogue. Refresh the page and try again.",
+      );
+      return;
+    }
+    const validOrderItems = orderItems.filter(
+      (item): item is { productId: string; quantity: number } => item !== null,
+    );
+
+    const whatsappWindow = window.open("", "_blank");
+    checkoutInProgress.current = true;
+    setCheckoutError("");
+    setCheckoutPending(true);
+    try {
+      const order = await createStorefrontOrder({
+        customerName,
+        phone,
+        ...(email ? { email } : {}),
+        deliveryAddress,
+        items: validOrderItems,
+      });
+      const customerMessage = [
+        orderMessage,
+        "",
+        `Order reference: ${order.id}`,
+        `Name: ${customerName}`,
+        `Phone: ${phone}`,
+        ...(email ? [`Email: ${email}`] : []),
+        `Delivery address: ${deliveryAddress}`,
+      ].join("\n");
+      const whatsappUrl = whatsappOrderUrl(customerMessage);
+      clear();
+      if (whatsappWindow) {
+        whatsappWindow.location.href = whatsappUrl;
+        setCheckoutOpen(false);
+        setWhatsappFollowUpUrl("");
+        setSavedOrderId("");
+        close();
+      } else {
+        setSavedOrderId(order.id);
+        setWhatsappFollowUpUrl(whatsappUrl);
+      }
+    } catch (cause) {
+      whatsappWindow?.close();
+      setCheckoutError(
+        cause instanceof Error
+          ? cause.message
+          : "The order could not be saved. Please try again.",
+      );
+    } finally {
+      checkoutInProgress.current = false;
+      setCheckoutPending(false);
+    }
   };
 
   return (
@@ -543,7 +634,100 @@ function CartDrawer({
             <X />
           </button>
         </div>
-        {items.length ? (
+        {savedOrderId && whatsappFollowUpUrl ? (
+          <div className="checkout-confirmation" role="status">
+            <Check size={34} />
+            <h3>Your order is recorded</h3>
+            <p>
+              Reference <b>{savedOrderId}</b>. Continue to WhatsApp to confirm
+              availability and delivery.
+            </p>
+            <a
+              className="primary full whatsapp-order"
+              href={whatsappFollowUpUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Continue to WhatsApp
+            </a>
+          </div>
+        ) : checkoutOpen ? (
+          <form className="checkout-details" onSubmit={placeOrder}>
+            <button
+              className="checkout-back"
+              type="button"
+              onClick={() => setCheckoutOpen(false)}
+              disabled={checkoutPending}
+            >
+              Back to bag
+            </button>
+            <h3>Delivery details</h3>
+            <p>
+              We’ll save your order, then continue to WhatsApp to confirm
+              availability and delivery.
+            </p>
+            <label>
+              Full name
+              <input
+                name="customerName"
+                autoComplete="name"
+                required
+                disabled={checkoutPending}
+              />
+            </label>
+            <label>
+              Phone number
+              <input
+                name="phone"
+                type="tel"
+                autoComplete="tel"
+                placeholder="+2348012345678"
+                pattern="\\+[1-9][0-9]{7,14}"
+                title="Enter an international phone number, for example +2348012345678"
+                required
+                disabled={checkoutPending}
+              />
+            </label>
+            <label>
+              Email (optional)
+              <input
+                name="email"
+                type="email"
+                autoComplete="email"
+                disabled={checkoutPending}
+              />
+            </label>
+            <label>
+              Delivery address
+              <textarea
+                name="deliveryAddress"
+                autoComplete="street-address"
+                rows={3}
+                required
+                disabled={checkoutPending}
+              />
+            </label>
+            {checkoutError && (
+              <p className="checkout-error" role="alert">
+                {checkoutError}
+              </p>
+            )}
+            <button
+              className="primary full whatsapp-order"
+              type="submit"
+              disabled={checkoutPending}
+            >
+              {checkoutPending ? (
+                <>
+                  <Loader2 size={17} className="admin-activity-spinner" />{" "}
+                  Saving order…
+                </>
+              ) : (
+                "Save order and continue"
+              )}
+            </button>
+          </form>
+        ) : items.length ? (
           <>
             <div className="cart-items">
               {items.map(({ product, quantity }) => (
@@ -589,14 +773,16 @@ function CartDrawer({
               <b>{formatNaira(total)}</b>
             </div>
             <div className="cart-actions">
-              <a
+              <button
                 className="primary full whatsapp-order"
-                href={whatsappOrderUrl(orderMessage)}
-                target="_blank"
-                rel="noopener noreferrer"
+                type="button"
+                onClick={() => {
+                  setCheckoutError("");
+                  setCheckoutOpen(true);
+                }}
               >
-                Place order on WhatsApp
-              </a>
+                Continue to checkout
+              </button>
               <button
                 className="cart-share-button"
                 type="button"
@@ -1933,13 +2119,16 @@ export function Storefront({
   view: StorefrontView;
   productSlug?: string;
 }) {
-  const liveSlug = slug ?? useSearchParams().get("slug") ?? undefined;
+  const searchParams = useSearchParams();
+  const liveSlug = slug ?? searchParams.get("slug") ?? undefined;
   const [cart, setCart] = useLocalStorageState<CartItem[]>(
     "hsg-texture-cart",
     [],
   );
   const [managedProducts, setManagedProducts] = useState<Product[]>([]);
   const [managedCategories, setManagedCategories] = useState<Category[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [catalogError, setCatalogError] = useState("");
   const [drawer, setDrawer] = useState(false);
   const [favoritesDrawer, setFavoritesDrawer] = useState(false);
   const [favorites, setFavorites] = useLocalStorageState<Product[]>(
@@ -1948,36 +2137,40 @@ export function Storefront({
   );
   useEffect(() => {
     let mounted = true;
+    let latestRequest = 0;
     const refresh = async () => {
-      try {
-        const next = await getStorefrontProducts();
-        if (mounted) setManagedProducts(next);
-      } catch {
-        if (mounted) setManagedProducts([]);
+      const request = ++latestRequest;
+      const [productResult, categoryResult] = await Promise.allSettled([
+        getStorefrontProducts(),
+        getStorefrontCategories(),
+      ]);
+      if (!mounted || request !== latestRequest) return;
+
+      const errors: string[] = [];
+      if (productResult.status === "fulfilled") {
+        setManagedProducts(productResult.value);
+      } else {
+        errors.push(
+          `Products: ${productResult.reason instanceof Error ? productResult.reason.message : "could not be loaded"}`,
+        );
       }
+      if (categoryResult.status === "fulfilled") {
+        setManagedCategories(categoryResult.value);
+      } else {
+        errors.push(
+          `Categories: ${categoryResult.reason instanceof Error ? categoryResult.reason.message : "could not be loaded"}`,
+        );
+      }
+      setCatalogError(errors.join(". "));
+      setCatalogLoading(false);
     };
     void refresh();
     window.addEventListener("hsg-products-updated", refresh);
+    window.addEventListener("hsg-categories-updated", refresh);
     return () => {
       mounted = false;
       window.removeEventListener("hsg-products-updated", refresh);
-    };
-  }, []);
-  useEffect(() => {
-    let mounted = true;
-    const refreshCategories = async () => {
-      try {
-        const next = await getStorefrontCategories();
-        if (mounted) setManagedCategories(next);
-      } catch {
-        if (mounted) setManagedCategories([]);
-      }
-    };
-    void refreshCategories();
-    window.addEventListener("hsg-categories-updated", refreshCategories);
-    return () => {
-      mounted = false;
-      window.removeEventListener("hsg-categories-updated", refreshCategories);
+      window.removeEventListener("hsg-categories-updated", refresh);
     };
   }, []);
   const products = managedProducts.filter(
@@ -2037,6 +2230,17 @@ export function Storefront({
             openCart={() => setDrawer(true)}
             openFavorites={() => setFavoritesDrawer(true)}
           />
+          {catalogLoading && (
+            <div className="catalog-api-error" role="status">
+              Loading the live catalogue…
+            </div>
+          )}
+          {catalogError && (
+            <div className="catalog-api-error" role="alert">
+              The live catalogue could not be fully loaded. {catalogError} Check
+              the backend connection and refresh the page.
+            </div>
+          )}
           {view === "home" && <HomeView add={addCardProduct} />}{" "}
           {view === "category" && <Listing category add={addCardProduct} />}{" "}
           {view === "products" && <Listing add={addCardProduct} />}{" "}
@@ -2054,6 +2258,7 @@ export function Storefront({
             close={() => setDrawer(false)}
             items={cart}
             update={update}
+            clear={() => setCart([])}
           />
           <FavoritesDrawer
             open={favoritesDrawer}
