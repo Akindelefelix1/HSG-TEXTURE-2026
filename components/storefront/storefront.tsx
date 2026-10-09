@@ -33,15 +33,18 @@ import {
   X,
 } from "lucide-react";
 import {
-  SITE_SETTINGS_KEY,
   STORY_SETTINGS_KEY,
   defaultSiteSettings,
   defaultStorySettings,
-  migrateSiteSettings,
   type CustomerFeedback,
   type SiteSettings,
   type StorySettings,
 } from "@/lib/catalog-admin";
+import {
+  getCachedSiteSettings,
+  getSiteSettings,
+  preloadSiteImage,
+} from "@/lib/site-settings-api";
 import { formatNaira, toProductSlug } from "@/lib/storefront";
 import type { Category, Product, StorefrontView } from "@/types/storefront";
 import { AppDialog } from "@/components/ui/app-dialog";
@@ -134,10 +137,8 @@ function Header({
 }) {
   const [menu, setMenu] = useState(false);
   const [search, setSearch] = useState(false);
-  const [siteSettings, setSiteSettings] = useLocalStorageState<SiteSettings>(
-    SITE_SETTINGS_KEY,
-    defaultSiteSettings,
-  );
+  const [siteSettings, setSiteSettings] =
+    useState<SiteSettings>(defaultSiteSettings);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const categorySection =
@@ -153,31 +154,34 @@ function Header({
     { href: "/contact", label: "Contact" },
   ];
   useEffect(() => {
-    const sync = () => {
+    let mounted = true;
+    const cached = getCachedSiteSettings();
+    queueMicrotask(() => {
+      if (mounted) setSiteSettings(cached);
+    });
+    const refresh = async () => {
       try {
-        const saved = window.localStorage.getItem(SITE_SETTINGS_KEY);
-        if (saved) {
-          const settings = migrateSiteSettings(
-            JSON.parse(saved) as SiteSettings,
-          );
-          setSiteSettings(settings);
-          window.localStorage.setItem(
-            SITE_SETTINGS_KEY,
-            JSON.stringify(settings),
-          );
-        }
+        const next = await getSiteSettings();
+        await preloadSiteImage(next.heroImageUrl);
+        if (mounted) setSiteSettings(next);
       } catch {
-        /* Keep valid settings. */
+        // Keep the currently rendered defaults or last successful settings.
       }
     };
-    sync();
-    window.addEventListener("storage", sync);
-    window.addEventListener("hsg-site-settings-updated", sync);
-    return () => {
-      window.removeEventListener("storage", sync);
-      window.removeEventListener("hsg-site-settings-updated", sync);
+    const syncCached = async () => {
+      const next = getCachedSiteSettings();
+      await preloadSiteImage(next.heroImageUrl);
+      if (mounted) setSiteSettings(next);
     };
-  }, [setSiteSettings]);
+    void refresh();
+    window.addEventListener("storage", syncCached);
+    window.addEventListener("hsg-site-settings-updated", refresh);
+    return () => {
+      mounted = false;
+      window.removeEventListener("storage", syncCached);
+      window.removeEventListener("hsg-site-settings-updated", refresh);
+    };
+  }, []);
   useEffect(() => {
     const hero = document.querySelector(".hero");
     if (!hero) return;
@@ -207,7 +211,11 @@ function Header({
       trust[1].lastChild.textContent = ` ${siteSettings.trustTwo}`;
     if (note?.lastChild)
       note.lastChild.textContent = ` ${siteSettings.imageNote}`;
-    if (siteSettings.heroImageId)
+    if (siteSettings.heroImageUrl) {
+      const image = hero.querySelector<HTMLElement>(".hero-image");
+      if (image)
+        image.style.backgroundImage = `url(${siteSettings.heroImageUrl})`;
+    } else if (siteSettings.heroImageId)
       void getProductMedia(siteSettings.heroImageId).then((blob) => {
         if (blob) {
           const url = URL.createObjectURL(blob);

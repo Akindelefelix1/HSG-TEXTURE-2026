@@ -738,6 +738,11 @@ footer {
   flex-direction: column;
   gap: 13px;
 }
+.footer-main .brand-logo {
+  background-color: transparent;
+  filter: invert(1);
+  mix-blend-mode: screen;
+}
 .footer-main p,
 .footer-main a {
   color: #bfc3cd;

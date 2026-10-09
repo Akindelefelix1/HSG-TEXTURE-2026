@@ -32,17 +32,20 @@ import {
   type BetterAuthVanillaAdapterInstance,
 } from "@neondatabase/neon-js/auth/vanilla/adapters";
 import {
-  SITE_SETTINGS_KEY,
   STORY_SETTINGS_KEY,
   defaultSiteSettings,
   defaultStorySettings,
   makeAdminId,
   migrateAdminCatalog,
-  migrateSiteSettings,
   type CustomerFeedback,
   type SiteSettings,
   type StorySettings,
 } from "@/lib/catalog-admin";
+import {
+  getAdminSiteSettings,
+  getCachedSiteSettings,
+  updateAdminSiteSettings,
+} from "@/lib/site-settings-api";
 import { formatNaira } from "@/lib/storefront";
 import type { Category, Product, ProductMedia } from "@/types/storefront";
 import { AppDialog } from "@/components/ui/app-dialog";
@@ -247,18 +250,12 @@ export function AdminDashboard() {
 
   useEffect(() => {
     migrateAdminCatalog();
-    const settings = migrateSiteSettings(
-      readLocal(SITE_SETTINGS_KEY, defaultSiteSettings),
-    );
-    window.localStorage.setItem(SITE_SETTINGS_KEY, JSON.stringify(settings));
     queueMicrotask(() => {
-      setSiteSettings(settings);
+      const cachedSettings = getCachedSiteSettings();
+      setSiteSettings(cachedSettings);
+      setHeroPreview(cachedSettings.heroImageUrl ?? "");
       setStorySettings(readLocal(STORY_SETTINGS_KEY, defaultStorySettings));
     });
-    if (settings.heroImageId)
-      void getProductMedia(settings.heroImageId).then((blob) => {
-        if (blob) setHeroPreview(URL.createObjectURL(blob));
-      });
     let mounted = true;
     const restoreAdminSession = async () => {
       try {
@@ -270,11 +267,17 @@ export function AdminDashboard() {
           );
         if (!data?.token) return;
         const user = await verifyAdminRole(apiUrl, data.token);
-        const serverCategories = await getAdminCategories(apiUrl, data.token);
-        const serverProducts = await getAdminProducts(apiUrl, data.token);
+        const [serverCategories, serverProducts, serverSettings] =
+          await Promise.all([
+            getAdminCategories(apiUrl, data.token),
+            getAdminProducts(apiUrl, data.token),
+            getAdminSiteSettings(apiUrl, data.token),
+          ]);
         if (mounted) {
           setCategories(serverCategories);
           setProducts(serverProducts);
+          setSiteSettings(serverSettings);
+          setHeroPreview(serverSettings.heroImageUrl ?? "");
           setAdminUser(user);
           setAuthenticated(true);
         }
@@ -833,23 +836,41 @@ export function AdminDashboard() {
     });
   const saveSiteSettings = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    void runAdminAction("Saving website changes", () => {
-      window.localStorage.setItem(
-        SITE_SETTINGS_KEY,
-        JSON.stringify(siteSettings),
+    void runAdminAction("Saving website changes", async () => {
+      const { auth, apiUrl } = getAdminAuthServices();
+      const { data, error } = await auth.token();
+      if (error || !data?.token)
+        throw new Error(error?.message ?? "Your admin session has expired.");
+      const updated = await updateAdminSiteSettings(
+        apiUrl,
+        data.token,
+        siteSettings,
       );
-      window.dispatchEvent(new Event("hsg-site-settings-updated"));
+      setSiteSettings(updated);
+      setHeroPreview(updated.heroImageUrl ?? heroPreview);
       flash("Website content updated.");
     });
   };
   const updateHeroImage = async (file?: File) => {
     if (!file || !file.type.startsWith("image/")) return;
     await runAdminAction("Uploading hero image", async () => {
-      const id = siteSettings.heroImageId ?? "site-hero-image";
-      await saveProductMedia(id, file);
-      if (heroPreview) URL.revokeObjectURL(heroPreview);
-      setHeroPreview(URL.createObjectURL(file));
-      setSiteSettings((current) => ({ ...current, heroImageId: id }));
+      const { auth, apiUrl } = getAdminAuthServices();
+      const { data, error } = await auth.token();
+      if (error || !data?.token)
+        throw new Error(error?.message ?? "Your admin session has expired.");
+      const media = await uploadAdminProductMedia(
+        apiUrl,
+        data.token,
+        file,
+        "site hero",
+      );
+      setHeroPreview(media.url ?? "");
+      setSiteSettings((current) => ({
+        ...current,
+        heroImageKey: media.key,
+        heroImageUrl: media.url,
+        heroImageId: undefined,
+      }));
     });
   };
 
